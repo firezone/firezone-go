@@ -1,0 +1,159 @@
+package firezone
+
+import "context"
+
+// ResourceType is the type of network object a Resource represents.
+type ResourceType string
+
+// Resource types accepted by [ResourcesService.Create] and
+// [ResourcesService.Update]. "internet" also exists but is
+// API-read-only - the API returns 403 if you try to create or update
+// one, so it's deliberately not offered as a constant here.
+const (
+	ResourceTypeCIDR             ResourceType = "cidr"
+	ResourceTypeIP               ResourceType = "ip"
+	ResourceTypeDNS              ResourceType = "dns"
+	ResourceTypeStaticDevicePool ResourceType = "static_device_pool"
+)
+
+// IPStack constrains which IP families a Resource is reachable over.
+type IPStack string
+
+// IPStack values.
+const (
+	IPStackIPv4Only IPStack = "ipv4_only"
+	IPStackIPv6Only IPStack = "ipv6_only"
+	IPStackDual     IPStack = "dual"
+)
+
+// FilterProtocol is the transport protocol a [Filter] applies to.
+type FilterProtocol string
+
+// FilterProtocol values.
+const (
+	FilterProtocolTCP  FilterProtocol = "tcp"
+	FilterProtocolUDP  FilterProtocol = "udp"
+	FilterProtocolICMP FilterProtocol = "icmp"
+)
+
+// Filter restricts the protocols and ports a Resource exposes.
+type Filter struct {
+	Protocol FilterProtocol `json:"protocol"`
+	// Ports are port numbers or ranges (e.g. "80" or "8000 - 9000").
+	// Not applicable to FilterProtocolICMP.
+	Ports []string `json:"ports,omitempty"`
+}
+
+// Resource is a Firezone Resource - a network object (CIDR, IP, DNS
+// name, or static device pool) that Policies grant access to.
+type Resource struct {
+	ID                 string       `json:"id"`
+	Name               string       `json:"name"`
+	Address            string       `json:"address"`
+	AddressDescription string       `json:"address_description"`
+	Type               ResourceType `json:"type"`
+	IPStack            IPStack      `json:"ip_stack,omitempty"`
+	SiteID             string       `json:"site_id,omitempty"`
+	Filters            []Filter     `json:"filters"`
+}
+
+// CreateResourceRequest is the request body for [ResourcesService.Create].
+type CreateResourceRequest struct {
+	Name               string       `json:"name"`
+	Type               ResourceType `json:"type"`
+	Address            string       `json:"address,omitempty"`
+	AddressDescription string       `json:"address_description,omitempty"`
+	IPStack            IPStack      `json:"ip_stack,omitempty"`
+	SiteID             string       `json:"site_id,omitempty"`
+	Filters            []Filter     `json:"filters,omitempty"`
+}
+
+// UpdateResourceRequest is the request body for [ResourcesService.Update].
+// All fields are optional; omitted fields keep their current value.
+type UpdateResourceRequest struct {
+	Name               string       `json:"name,omitempty"`
+	Type               ResourceType `json:"type,omitempty"`
+	Address            string       `json:"address,omitempty"`
+	AddressDescription string       `json:"address_description,omitempty"`
+	IPStack            IPStack      `json:"ip_stack,omitempty"`
+	SiteID             string       `json:"site_id,omitempty"`
+	Filters            []Filter     `json:"filters,omitempty"`
+}
+
+// ResourcesService manages Resources.
+type ResourcesService struct {
+	client *Client
+}
+
+// Get fetches a single Resource by ID.
+func (s *ResourcesService) Get(ctx context.Context, id string) (*Resource, error) {
+	var resource Resource
+	if err := s.client.do(ctx, "GET", "resources/"+id, nil, nil, &resource); err != nil {
+		return nil, err
+	}
+	return &resource, nil
+}
+
+// ResourceListOptions extends ListOptions with Resources-specific
+// filters.
+type ResourceListOptions struct {
+	ListOptions
+	// Name filters to Resources with this exact name.
+	Name string
+	// Type filters to Resources of this type.
+	Type ResourceType
+	// SiteID filters to Resources connected to this Site.
+	SiteID string
+	// Address filters to Resources with this exact address.
+	Address string
+	// IPStack filters to Resources with this exact ip_stack.
+	IPStack IPStack
+}
+
+// List returns a page of Resources. Pass nil for opts to use the API's
+// default page size and no filters.
+func (s *ResourcesService) List(ctx context.Context, opts *ResourceListOptions) (*Page[Resource], error) {
+	if opts == nil {
+		opts = &ResourceListOptions{}
+	}
+	q := filterQuery(opts.ListOptions,
+		[2]string{"name", opts.Name},
+		[2]string{"type", string(opts.Type)},
+		[2]string{"site_id", opts.SiteID},
+		[2]string{"address", opts.Address},
+		[2]string{"ip_stack", string(opts.IPStack)},
+	)
+	return doList[Resource](ctx, s.client, "GET", "resources", q)
+}
+
+// Create creates a new Resource. Note: type "internet" cannot be
+// created via the API - the API returns 403 Forbidden.
+func (s *ResourcesService) Create(ctx context.Context, req *CreateResourceRequest) (*Resource, error) {
+	body, err := wrapBody("resource", req)
+	if err != nil {
+		return nil, err
+	}
+	var resource Resource
+	if err := s.client.do(ctx, "POST", "resources", nil, body, &resource); err != nil {
+		return nil, err
+	}
+	return &resource, nil
+}
+
+// Update updates a Resource.
+func (s *ResourcesService) Update(ctx context.Context, id string, req *UpdateResourceRequest) (*Resource, error) {
+	body, err := wrapBody("resource", req)
+	if err != nil {
+		return nil, err
+	}
+	var resource Resource
+	if err := s.client.do(ctx, "PUT", "resources/"+id, nil, body, &resource); err != nil {
+		return nil, err
+	}
+	return &resource, nil
+}
+
+// Delete deletes a Resource.
+func (s *ResourcesService) Delete(ctx context.Context, id string) error {
+	return s.client.do(ctx, "DELETE", "resources/"+id, nil, nil, nil)
+}
