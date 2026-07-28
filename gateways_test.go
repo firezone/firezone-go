@@ -28,8 +28,8 @@ func TestGatewaysService_Provision(t *testing.T) {
 		t.Fatalf("Provision returned error: %v", err)
 	}
 
-	if gotMethod != http.MethodPost || gotPath != "/v1/sites/site-1/gateways" {
-		t.Errorf("request = %s %s, want POST /v1/sites/site-1/gateways", gotMethod, gotPath)
+	if gotMethod != http.MethodPost || gotPath != "/sites/site-1/gateways" {
+		t.Errorf("request = %s %s, want POST /sites/site-1/gateways", gotMethod, gotPath)
 	}
 	reqGateway, ok := gotBody["gateway"].(map[string]any)
 	if !ok || reqGateway["name"] != "gw-nyc-1" {
@@ -101,8 +101,8 @@ func TestGatewaysService_Update_Rename(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Update returned error: %v", err)
 	}
-	if gotMethod != http.MethodPut || gotPath != "/v1/sites/site-1/gateways/gw-1" {
-		t.Errorf("request = %s %s, want PUT /v1/sites/site-1/gateways/gw-1", gotMethod, gotPath)
+	if gotMethod != http.MethodPut || gotPath != "/sites/site-1/gateways/gw-1" {
+		t.Errorf("request = %s %s, want PUT /sites/site-1/gateways/gw-1", gotMethod, gotPath)
 	}
 	if gateway.Name != "renamed" {
 		t.Errorf("gateway.Name = %q, want renamed", gateway.Name)

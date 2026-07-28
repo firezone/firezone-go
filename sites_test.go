@@ -42,8 +42,8 @@ func TestSitesService_Get(t *testing.T) {
 		if gotMethod != http.MethodGet {
 			t.Errorf("method = %q, want GET", gotMethod)
 		}
-		if gotPath != "/v1/sites/site-1" {
-			t.Errorf("path = %q, want /v1/sites/site-1", gotPath)
+		if gotPath != "/sites/site-1" {
+			t.Errorf("path = %q, want /sites/site-1", gotPath)
 		}
 		if site.ID != "site-1" || site.Name != "primary-dc" {
 			t.Errorf("site = %+v, want {ID: site-1, Name: primary-dc}", site)
@@ -168,8 +168,8 @@ func TestSitesService_Create(t *testing.T) {
 			t.Fatalf("Create returned error: %v", err)
 		}
 
-		if gotMethod != http.MethodPost || gotPath != "/v1/sites" {
-			t.Errorf("request = %s %s, want POST /v1/sites", gotMethod, gotPath)
+		if gotMethod != http.MethodPost || gotPath != "/sites" {
+			t.Errorf("request = %s %s, want POST /sites", gotMethod, gotPath)
 		}
 		wantBody := map[string]any{"site": map[string]any{"name": "primary-dc"}}
 		if !jsonEqual(gotBody, wantBody) {
@@ -220,8 +220,8 @@ func TestSitesService_Update(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Update returned error: %v", err)
 	}
-	if gotMethod != http.MethodPut || gotPath != "/v1/sites/site-1" {
-		t.Errorf("request = %s %s, want PUT /v1/sites/site-1", gotMethod, gotPath)
+	if gotMethod != http.MethodPut || gotPath != "/sites/site-1" {
+		t.Errorf("request = %s %s, want PUT /sites/site-1", gotMethod, gotPath)
 	}
 	if site.Name != "renamed" {
 		t.Errorf("site.Name = %q, want renamed", site.Name)
@@ -249,8 +249,8 @@ func TestSitesService_Delete(t *testing.T) {
 	if err := client.Sites.Delete(context.Background(), "site-1"); err != nil {
 		t.Fatalf("Delete returned error: %v", err)
 	}
-	if gotMethod != http.MethodDelete || gotPath != "/v1/sites/site-1" {
-		t.Errorf("request = %s %s, want DELETE /v1/sites/site-1", gotMethod, gotPath)
+	if gotMethod != http.MethodDelete || gotPath != "/sites/site-1" {
+		t.Errorf("request = %s %s, want DELETE /sites/site-1", gotMethod, gotPath)
 	}
 
 	t.Run("not found", func(t *testing.T) {

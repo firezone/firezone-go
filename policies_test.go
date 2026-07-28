@@ -64,8 +64,8 @@ func TestPoliciesService_DisableEnable(t *testing.T) {
 		if _, err := client.Policies.Disable(context.Background(), "pol-1"); err != nil {
 			t.Fatalf("Disable returned error: %v", err)
 		}
-		if gotMethod != http.MethodPost || gotPath != "/v1/policies/pol-1/disable" {
-			t.Errorf("request = %s %s, want POST /v1/policies/pol-1/disable", gotMethod, gotPath)
+		if gotMethod != http.MethodPost || gotPath != "/policies/pol-1/disable" {
+			t.Errorf("request = %s %s, want POST /policies/pol-1/disable", gotMethod, gotPath)
 		}
 	})
 
@@ -81,8 +81,8 @@ func TestPoliciesService_DisableEnable(t *testing.T) {
 		if _, err := client.Policies.Enable(context.Background(), "pol-1"); err != nil {
 			t.Fatalf("Enable returned error: %v", err)
 		}
-		if gotMethod != http.MethodPost || gotPath != "/v1/policies/pol-1/enable" {
-			t.Errorf("request = %s %s, want POST /v1/policies/pol-1/enable", gotMethod, gotPath)
+		if gotMethod != http.MethodPost || gotPath != "/policies/pol-1/enable" {
+			t.Errorf("request = %s %s, want POST /policies/pol-1/enable", gotMethod, gotPath)
 		}
 	})
 

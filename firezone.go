@@ -8,8 +8,10 @@
 //	client, err := firezone.NewClient("https://api.firezone.dev", token)
 //	site, err := client.Sites.Create(ctx, &firezone.CreateSiteRequest{Name: "primary-dc"})
 //
-// baseURL is always the bare API host, with no version segment - the
-// client owns the "/v1" prefix internally.
+// The API is currently unversioned - baseURL is the bare API host, with
+// no path prefix of any kind. (URL path versioning was tried and rolled
+// back before shipping; if it returns, it'll live in exactly one place
+// here rather than every call site.)
 package firezone
 
 import (
@@ -36,11 +38,6 @@ func (b requestBody) reader() io.Reader {
 	}
 	return bytes.NewReader(b)
 }
-
-// apiVersionPrefix is the only place in this module that knows which
-// API version it targets. Bumping to /v2 someday is a one-line change
-// here, not a signature or config change for consumers.
-const apiVersionPrefix = "/v1"
 
 const defaultUserAgent = "firezone-go-client"
 
@@ -172,7 +169,7 @@ type listEnvelope[T any] struct {
 // non-nil *APIError.
 func (c *Client) rawRequest(ctx context.Context, method, requestPath string, query url.Values, body requestBody) ([]byte, error) {
 	u := *c.baseURL
-	u.Path = path.Join(u.Path, apiVersionPrefix, requestPath)
+	u.Path = path.Join(u.Path, requestPath)
 	if query != nil {
 		u.RawQuery = query.Encode()
 	}

@@ -27,9 +27,7 @@ gw, err := client.Sites.Gateways(site.ID).Provision(ctx, &firezone.ProvisionGate
 ```
 
 `baseURL` passed to `NewClient` is always the bare API host
-(`https://api.firezone.dev`), never include a version segment. The
-client appends `/v1` internally, so bumping the target API version is a
-one-line change inside this module, not a breaking change for callers.
+(`https://api.firezone.dev`).
 
 ## Resources
 

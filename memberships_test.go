@@ -24,8 +24,8 @@ func TestMembershipsService_ReplaceAll(t *testing.T) {
 		t.Fatalf("ReplaceAll returned error: %v", err)
 	}
 
-	if gotMethod != http.MethodPut || gotPath != "/v1/groups/group-1/memberships" {
-		t.Errorf("request = %s %s, want PUT /v1/groups/group-1/memberships", gotMethod, gotPath)
+	if gotMethod != http.MethodPut || gotPath != "/groups/group-1/memberships" {
+		t.Errorf("request = %s %s, want PUT /groups/group-1/memberships", gotMethod, gotPath)
 	}
 	entries, ok := gotBody["memberships"].([]any)
 	if !ok || len(entries) != 2 {
@@ -52,8 +52,8 @@ func TestMembershipsService_Patch(t *testing.T) {
 		t.Fatalf("Patch returned error: %v", err)
 	}
 
-	if gotMethod != http.MethodPatch || gotPath != "/v1/groups/group-1/memberships" {
-		t.Errorf("request = %s %s, want PATCH /v1/groups/group-1/memberships", gotMethod, gotPath)
+	if gotMethod != http.MethodPatch || gotPath != "/groups/group-1/memberships" {
+		t.Errorf("request = %s %s, want PATCH /groups/group-1/memberships", gotMethod, gotPath)
 	}
 	membershipBody, ok := gotBody["memberships"].(map[string]any)
 	if !ok {

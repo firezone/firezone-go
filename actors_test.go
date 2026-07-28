@@ -23,8 +23,8 @@ func TestActorsService_DisableEnable(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Disable returned error: %v", err)
 		}
-		if gotMethod != http.MethodPost || gotPath != "/v1/actors/actor-1/disable" {
-			t.Errorf("request = %s %s, want POST /v1/actors/actor-1/disable", gotMethod, gotPath)
+		if gotMethod != http.MethodPost || gotPath != "/actors/actor-1/disable" {
+			t.Errorf("request = %s %s, want POST /actors/actor-1/disable", gotMethod, gotPath)
 		}
 		if !actor.IsDisabled() {
 			t.Error("actor.IsDisabled() = false, want true")

@@ -23,8 +23,8 @@ func TestEntraDirectoriesService_Get(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Get returned error: %v", err)
 		}
-		if gotPath != "/v1/entra_directories/dir-1" {
-			t.Errorf("path = %q, want /v1/entra_directories/dir-1", gotPath)
+		if gotPath != "/entra_directories/dir-1" {
+			t.Errorf("path = %q, want /entra_directories/dir-1", gotPath)
 		}
 		if dir.ID != "dir-1" || dir.Name != "Entra" || dir.TenantID != "tenant-1" {
 			t.Errorf("dir = %+v, want {ID: dir-1, Name: Entra, TenantID: tenant-1}", dir)
@@ -55,8 +55,8 @@ func TestEntraDirectoriesService_List(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
-	if gotPath != "/v1/entra_directories" {
-		t.Errorf("path = %q, want /v1/entra_directories", gotPath)
+	if gotPath != "/entra_directories" {
+		t.Errorf("path = %q, want /entra_directories", gotPath)
 	}
 	if len(page.Data) != 1 || page.Data[0].ID != "dir-1" {
 		t.Errorf("page.Data = %+v, want one directory with ID dir-1", page.Data)
@@ -76,8 +76,8 @@ func TestGoogleDirectoriesService_Get(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get returned error: %v", err)
 	}
-	if gotPath != "/v1/google_directories/dir-2" {
-		t.Errorf("path = %q, want /v1/google_directories/dir-2", gotPath)
+	if gotPath != "/google_directories/dir-2" {
+		t.Errorf("path = %q, want /google_directories/dir-2", gotPath)
 	}
 	if dir.ID != "dir-2" || dir.Name != "Google" || dir.Domain != "example.com" {
 		t.Errorf("dir = %+v, want {ID: dir-2, Name: Google, Domain: example.com}", dir)
@@ -97,8 +97,8 @@ func TestOktaDirectoriesService_Get(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get returned error: %v", err)
 	}
-	if gotPath != "/v1/okta_directories/dir-3" {
-		t.Errorf("path = %q, want /v1/okta_directories/dir-3", gotPath)
+	if gotPath != "/okta_directories/dir-3" {
+		t.Errorf("path = %q, want /okta_directories/dir-3", gotPath)
 	}
 	if dir.ID != "dir-3" || dir.Name != "Okta" || dir.OktaDomain != "example.okta.com" {
 		t.Errorf("dir = %+v, want {ID: dir-3, Name: Okta, OktaDomain: example.okta.com}", dir)

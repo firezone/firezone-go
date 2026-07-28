@@ -17,7 +17,12 @@ if [ -n "$out" ]; then echo "$out"; exit 1; fi
 
 [tasks.vet]
 description = "go vet (CI check)"
-run = "go vet ./..."
+# The second pass compiles the //go:build integration files, which the
+# untagged build skips entirely - without it they rot silently.
+run = """
+go vet ./...
+go vet -tags=integration ./...
+"""
 
 [tasks.lint]
 description = "golangci-lint (CI check)"
@@ -31,10 +36,29 @@ run = "go test ./... -race -count=1"
 description = "Run integration tests against a real local dev server (requires FIREZONE_ENDPOINT/FIREZONE_TOKEN)"
 run = "go test -tags=integration ./... -run Integration -v"
 
+# The oldest Go this SDK claims to support, per the `go` directive in
+# go.mod. Kept here so `mise run test-floor` and CI use one source of
+# truth; bump both together.
+[tasks.test-floor]
+description = "Build + test against the oldest supported Go (the go.mod floor)"
+run = """
+floor="go1.22.12"
+GOTOOLCHAIN=$floor go build ./...
+GOTOOLCHAIN=$floor go vet ./...
+# No -race here: the `test` task already covers that on the current
+# toolchain. This run only has to prove the floor still compiles and
+# behaves.
+GOTOOLCHAIN=$floor go test ./... -count=1
+"""
+
+[tasks.vuln]
+description = "govulncheck (CI check)"
+run = "govulncheck ./..."
+
 [tasks.build]
 description = "Build (CI check)"
 run = "go build ./..."
 
 [tasks.check]
 description = "Run all CI static analysis + unit test checks (matches CI)"
-depends = ["fmt-check", "vet", "lint", "test", "build"]
+depends = ["fmt-check", "vet", "lint", "test", "vuln", "build"]
