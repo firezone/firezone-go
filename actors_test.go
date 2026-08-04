@@ -12,10 +12,12 @@ import (
 func TestActorsService_DisableEnable(t *testing.T) {
 	t.Run("disable", func(t *testing.T) {
 		var gotMethod, gotPath string
+		var gotBody map[string]any
 		client := testutil.NewClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gotMethod, gotPath = r.Method, r.URL.Path
+			decodeJSONBody(t, r, &gotBody)
 			testutil.JSONResponse(http.StatusOK, map[string]any{
-				"data": map[string]any{"id": "actor-1", "name": "svc", "type": "service_account", "disabled_at": "2026-01-01T00:00:00Z"},
+				"data": map[string]any{"id": "actor-1", "name": "svc", "type": "service_account", "is_disabled": true},
 			})(w, r)
 		}))
 
@@ -23,16 +25,62 @@ func TestActorsService_DisableEnable(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Disable returned error: %v", err)
 		}
-		if gotMethod != http.MethodPost || gotPath != "/actors/actor-1/disable" {
-			t.Errorf("request = %s %s, want POST /actors/actor-1/disable", gotMethod, gotPath)
+		if gotMethod != http.MethodPut || gotPath != "/actors/actor-1" {
+			t.Errorf("request = %s %s, want PUT /actors/actor-1", gotMethod, gotPath)
 		}
-		if !actor.IsDisabled() {
-			t.Error("actor.IsDisabled() = false, want true")
+
+		reqActor, ok := gotBody["actor"].(map[string]any)
+		if !ok {
+			t.Fatalf("body[\"actor\"] = %v, want an object", gotBody["actor"])
+		}
+		if reqActor["is_disabled"] != true {
+			t.Errorf("body actor.is_disabled = %v, want true", reqActor["is_disabled"])
+		}
+		// Disable must send nothing but is_disabled - a zero-valued
+		// Name or Type would otherwise overwrite the Actor's real ones.
+		if len(reqActor) != 1 {
+			t.Errorf("body actor = %v, want only is_disabled", reqActor)
+		}
+		if !actor.IsDisabled {
+			t.Error("actor.IsDisabled = false, want true")
+		}
+	})
+
+	t.Run("enable", func(t *testing.T) {
+		var gotMethod, gotPath string
+		var gotBody map[string]any
+		client := testutil.NewClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotMethod, gotPath = r.Method, r.URL.Path
+			decodeJSONBody(t, r, &gotBody)
+			testutil.JSONResponse(http.StatusOK, map[string]any{
+				"data": map[string]any{"id": "actor-1", "name": "svc", "type": "service_account", "is_disabled": false},
+			})(w, r)
+		}))
+
+		actor, err := client.Actors.Enable(context.Background(), "actor-1")
+		if err != nil {
+			t.Fatalf("Enable returned error: %v", err)
+		}
+		if gotMethod != http.MethodPut || gotPath != "/actors/actor-1" {
+			t.Errorf("request = %s %s, want PUT /actors/actor-1", gotMethod, gotPath)
+		}
+
+		reqActor, ok := gotBody["actor"].(map[string]any)
+		if !ok {
+			t.Fatalf("body[\"actor\"] = %v, want an object", gotBody["actor"])
+		}
+		// false is not the same as omitted: is_disabled is a *bool
+		// precisely so enabling doesn't drop out of the JSON body.
+		if reqActor["is_disabled"] != false {
+			t.Errorf("body actor.is_disabled = %v, want false", reqActor["is_disabled"])
+		}
+		if actor.IsDisabled {
+			t.Error("actor.IsDisabled = true, want false")
 		}
 	})
 
 	t.Run("cannot disable self", func(t *testing.T) {
-		client := testutil.NewClient(t, testutil.ProblemResponse(http.StatusForbidden, "You cannot disable yourself"))
+		client := testutil.NewClient(t, testutil.ProblemResponse(http.StatusForbidden, "You cannot disable the Actor used to make this request"))
 		_, err := client.Actors.Disable(context.Background(), "self")
 		if !firezone.IsForbidden(err) {
 			t.Fatalf("IsForbidden(err) = false, want true (err: %v)", err)

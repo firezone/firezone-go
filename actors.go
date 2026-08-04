@@ -26,16 +26,23 @@ type Actor struct {
 	Type                 ActorType  `json:"type"`
 	Email                string     `json:"email,omitempty"`
 	AllowEmailOTPSignIn  bool       `json:"allow_email_otp_sign_in"`
-	DisabledAt           *time.Time `json:"disabled_at,omitempty"`
+	IsDisabled           bool       `json:"is_disabled"`
 	LastSeenAt           *time.Time `json:"last_seen_at,omitempty"`
 	CreatedByDirectoryID string     `json:"created_by_directory_id,omitempty"`
 	InsertedAt           time.Time  `json:"inserted_at"`
 	UpdatedAt            time.Time  `json:"updated_at"`
 }
 
-// IsDisabled reports whether the Actor is currently disabled.
-func (a *Actor) IsDisabled() bool {
-	return a.DisabledAt != nil
+// IsSynced reports whether the Actor was created by an identity
+// provider directory sync, and so is owned by the IdP rather than by
+// this API. It mirrors [Group.IsSynced].
+//
+// Unlike a synced Group, a synced Actor is not wholly read-only here -
+// but its existence and identity are the directory's to decide, so
+// tooling that adopts an existing account should treat it as
+// discovered rather than managed.
+func (a *Actor) IsSynced() bool {
+	return a.CreatedByDirectoryID != ""
 }
 
 // CreateActorRequest is the request body for [ActorsService.Create].
@@ -47,15 +54,22 @@ type CreateActorRequest struct {
 }
 
 // UpdateActorRequest is the request body for [ActorsService.Update].
+// Every field is optional; omitted fields keep their current value.
 //
 // Changing Email to a different address signs the Actor out and
 // unlinks their identity providers - see the API's actor update
 // documentation for details.
+//
+// Setting IsDisabled to true immediately revokes the Actor's active
+// Client tokens and portal sessions. The API returns 403 Forbidden if
+// it names the Actor behind the calling token - an Actor cannot
+// disable itself.
 type UpdateActorRequest struct {
 	Name                string    `json:"name,omitempty"`
 	Type                ActorType `json:"type,omitempty"`
 	Email               string    `json:"email,omitempty"`
 	AllowEmailOTPSignIn *bool     `json:"allow_email_otp_sign_in,omitempty"`
+	IsDisabled          *bool     `json:"is_disabled,omitempty"`
 }
 
 // ActorsService manages Actors.
@@ -133,19 +147,20 @@ func (s *ActorsService) Delete(ctx context.Context, id string) error {
 // Disable disables an Actor, immediately revoking all of its active
 // Client tokens and portal sessions. Returns 403 Forbidden if id is the
 // authenticated actor itself.
+//
+// This is a convenience wrapper over [ActorsService.Update]; the API
+// has no dedicated disable endpoint.
 func (s *ActorsService) Disable(ctx context.Context, id string) (*Actor, error) {
-	var actor Actor
-	if err := s.client.do(ctx, "POST", "actors/"+id+"/disable", nil, nil, &actor); err != nil {
-		return nil, err
-	}
-	return &actor, nil
+	disabled := true
+	return s.Update(ctx, id, &UpdateActorRequest{IsDisabled: &disabled})
 }
 
-// Enable enables a disabled Actor.
+// Enable enables a disabled Actor. Idempotent - enabling an
+// already-enabled Actor is a no-op.
+//
+// This is a convenience wrapper over [ActorsService.Update]; the API
+// has no dedicated enable endpoint.
 func (s *ActorsService) Enable(ctx context.Context, id string) (*Actor, error) {
-	var actor Actor
-	if err := s.client.do(ctx, "POST", "actors/"+id+"/enable", nil, nil, &actor); err != nil {
-		return nil, err
-	}
-	return &actor, nil
+	disabled := false
+	return s.Update(ctx, id, &UpdateActorRequest{IsDisabled: &disabled})
 }

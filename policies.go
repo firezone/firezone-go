@@ -45,6 +45,7 @@ type Policy struct {
 	ResourceID            string      `json:"resource_id"`
 	Description           string      `json:"description"`
 	FlowLogUploadsEnabled bool        `json:"flow_log_uploads_enabled"`
+	IsDisabled            bool        `json:"is_disabled"`
 	Conditions            []Condition `json:"conditions"`
 }
 
@@ -58,11 +59,16 @@ type CreatePolicyRequest struct {
 }
 
 // UpdatePolicyRequest is the request body for [PoliciesService.Update].
+// Every field is optional; omitted fields keep their current value.
+//
+// Setting IsDisabled to true stops the Policy granting access without
+// deleting it.
 type UpdatePolicyRequest struct {
 	GroupID               string      `json:"group_id,omitempty"`
 	ResourceID            string      `json:"resource_id,omitempty"`
 	Description           string      `json:"description,omitempty"`
 	FlowLogUploadsEnabled *bool       `json:"flow_log_uploads_enabled,omitempty"`
+	IsDisabled            *bool       `json:"is_disabled,omitempty"`
 	Conditions            []Condition `json:"conditions,omitempty"`
 }
 
@@ -133,21 +139,23 @@ func (s *PoliciesService) Delete(ctx context.Context, id string) error {
 	return s.client.do(ctx, "DELETE", "policies/"+id, nil, nil, nil)
 }
 
-// Disable disables a Policy. Idempotent - disabling an already-disabled
-// Policy is a no-op.
+// Disable disables a Policy, stopping it granting access without
+// deleting it. Idempotent - disabling an already-disabled Policy is a
+// no-op.
+//
+// This is a convenience wrapper over [PoliciesService.Update]; the API
+// has no dedicated disable endpoint.
 func (s *PoliciesService) Disable(ctx context.Context, id string) (*Policy, error) {
-	var policy Policy
-	if err := s.client.do(ctx, "POST", "policies/"+id+"/disable", nil, nil, &policy); err != nil {
-		return nil, err
-	}
-	return &policy, nil
+	disabled := true
+	return s.Update(ctx, id, &UpdatePolicyRequest{IsDisabled: &disabled})
 }
 
-// Enable enables a Policy.
+// Enable enables a disabled Policy. Idempotent - enabling an
+// already-enabled Policy is a no-op.
+//
+// This is a convenience wrapper over [PoliciesService.Update]; the API
+// has no dedicated enable endpoint.
 func (s *PoliciesService) Enable(ctx context.Context, id string) (*Policy, error) {
-	var policy Policy
-	if err := s.client.do(ctx, "POST", "policies/"+id+"/enable", nil, nil, &policy); err != nil {
-		return nil, err
-	}
-	return &policy, nil
+	disabled := false
+	return s.Update(ctx, id, &UpdatePolicyRequest{IsDisabled: &disabled})
 }

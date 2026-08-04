@@ -54,35 +54,68 @@ func TestPoliciesService_Create(t *testing.T) {
 func TestPoliciesService_DisableEnable(t *testing.T) {
 	t.Run("disable", func(t *testing.T) {
 		var gotMethod, gotPath string
+		var gotBody map[string]any
 		client := testutil.NewClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gotMethod, gotPath = r.Method, r.URL.Path
+			decodeJSONBody(t, r, &gotBody)
 			testutil.JSONResponse(http.StatusOK, map[string]any{
-				"data": map[string]any{"id": "pol-1", "group_id": "g", "resource_id": "r"},
+				"data": map[string]any{"id": "pol-1", "group_id": "g", "resource_id": "r", "is_disabled": true},
 			})(w, r)
 		}))
 
-		if _, err := client.Policies.Disable(context.Background(), "pol-1"); err != nil {
+		policy, err := client.Policies.Disable(context.Background(), "pol-1")
+		if err != nil {
 			t.Fatalf("Disable returned error: %v", err)
 		}
-		if gotMethod != http.MethodPost || gotPath != "/policies/pol-1/disable" {
-			t.Errorf("request = %s %s, want POST /policies/pol-1/disable", gotMethod, gotPath)
+		if gotMethod != http.MethodPut || gotPath != "/policies/pol-1" {
+			t.Errorf("request = %s %s, want PUT /policies/pol-1", gotMethod, gotPath)
+		}
+
+		reqPolicy, ok := gotBody["policy"].(map[string]any)
+		if !ok {
+			t.Fatalf("body[\"policy\"] = %v, want an object", gotBody["policy"])
+		}
+		if reqPolicy["is_disabled"] != true {
+			t.Errorf("body policy.is_disabled = %v, want true", reqPolicy["is_disabled"])
+		}
+		// Disable must not send a zero-valued GroupID/ResourceID, which
+		// would repoint the Policy at nothing.
+		if len(reqPolicy) != 1 {
+			t.Errorf("body policy = %v, want only is_disabled", reqPolicy)
+		}
+		if !policy.IsDisabled {
+			t.Error("policy.IsDisabled = false, want true")
 		}
 	})
 
 	t.Run("enable", func(t *testing.T) {
 		var gotMethod, gotPath string
+		var gotBody map[string]any
 		client := testutil.NewClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gotMethod, gotPath = r.Method, r.URL.Path
+			decodeJSONBody(t, r, &gotBody)
 			testutil.JSONResponse(http.StatusOK, map[string]any{
-				"data": map[string]any{"id": "pol-1", "group_id": "g", "resource_id": "r"},
+				"data": map[string]any{"id": "pol-1", "group_id": "g", "resource_id": "r", "is_disabled": false},
 			})(w, r)
 		}))
 
-		if _, err := client.Policies.Enable(context.Background(), "pol-1"); err != nil {
+		policy, err := client.Policies.Enable(context.Background(), "pol-1")
+		if err != nil {
 			t.Fatalf("Enable returned error: %v", err)
 		}
-		if gotMethod != http.MethodPost || gotPath != "/policies/pol-1/enable" {
-			t.Errorf("request = %s %s, want POST /policies/pol-1/enable", gotMethod, gotPath)
+		if gotMethod != http.MethodPut || gotPath != "/policies/pol-1" {
+			t.Errorf("request = %s %s, want PUT /policies/pol-1", gotMethod, gotPath)
+		}
+
+		reqPolicy, ok := gotBody["policy"].(map[string]any)
+		if !ok {
+			t.Fatalf("body[\"policy\"] = %v, want an object", gotBody["policy"])
+		}
+		if reqPolicy["is_disabled"] != false {
+			t.Errorf("body policy.is_disabled = %v, want false", reqPolicy["is_disabled"])
+		}
+		if policy.IsDisabled {
+			t.Error("policy.IsDisabled = true, want false")
 		}
 	})
 
