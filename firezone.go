@@ -68,6 +68,9 @@ type Client struct {
 	Groups *GroupsService
 	// Actors manages Actors.
 	Actors *ActorsService
+	// ClientDevices manages Client devices. Named for [ClientDevice],
+	// since Clients is too easily confused with this type itself.
+	ClientDevices *ClientsService
 	// EntraDirectories reads Microsoft Entra directory connections
 	// (read-only).
 	EntraDirectories *EntraDirectoriesService
@@ -129,6 +132,7 @@ func NewClient(baseURL, token string, opts ...Option) (*Client, error) {
 	c.Policies = &PoliciesService{client: c}
 	c.Groups = &GroupsService{client: c}
 	c.Actors = &ActorsService{client: c}
+	c.ClientDevices = &ClientsService{client: c}
 	c.EntraDirectories = &EntraDirectoriesService{client: c}
 	c.GoogleDirectories = &GoogleDirectoriesService{client: c}
 	c.OktaDirectories = &OktaDirectoriesService{client: c}
