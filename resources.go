@@ -80,9 +80,18 @@ type UpdateResourceRequest struct {
 	Filters            []Filter     `json:"filters,omitempty"`
 }
 
-// ResourcesService manages Resources.
+// ResourcesService manages Resources, and, nested under them, static
+// device pool membership.
 type ResourcesService struct {
 	client *Client
+}
+
+// PoolMembers returns a [PoolMembersService] scoped to the
+// static_device_pool Resource identified by resourceID. Calling it for
+// any other Resource type is allowed, but every request that service
+// makes will fail with 400.
+func (s *ResourcesService) PoolMembers(resourceID string) *PoolMembersService {
+	return &PoolMembersService{client: s.client, resourceID: resourceID}
 }
 
 // Get fetches a single Resource by ID.
