@@ -95,9 +95,24 @@ func WithUserAgent(ua string) Option {
 	return func(c *Client) { c.userAgent = ua }
 }
 
+// defaultMaxRetries is the retry budget a client gets unless
+// [WithRetry] says otherwise.
+//
+// The API rate limits per account with a token bucket: 20 requests of
+// burst, refilling at roughly one per second. A Terraform apply or
+// destroy at the default parallelism of 10 drains that burst almost
+// immediately and then proceeds at the refill rate, so a request can
+// legitimately need to wait out several seconds of queue ahead of it.
+// The budget is sized for that, not for a transient blip.
+const defaultMaxRetries = 8
+
 // WithRetry configures automatic retry-with-backoff on HTTP 429
-// (rate limited) responses. Retries are enabled with a maximum of 5
-// attempts by default.
+// (rate limited) responses. Retries are enabled by default with a
+// budget of defaultMaxRetries.
+//
+// Waits honor the response's Retry-After header when present, falling
+// back to exponential backoff, and always add jitter so concurrent
+// callers don't retry in lockstep.
 func WithRetry(enabled bool, maxRetries int) Option {
 	return func(c *Client) {
 		c.retryEnabled = enabled
@@ -120,7 +135,7 @@ func NewClient(baseURL, token string, opts ...Option) (*Client, error) {
 		httpClient:   http.DefaultClient,
 		userAgent:    defaultUserAgent,
 		retryEnabled: true,
-		maxRetries:   5,
+		maxRetries:   defaultMaxRetries,
 	}
 
 	for _, opt := range opts {
