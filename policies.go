@@ -11,6 +11,7 @@ const (
 	ConditionPropertyRemoteIPLocationRegion ConditionProperty = "remote_ip_location_region"
 	ConditionPropertyRemoteIP               ConditionProperty = "remote_ip"
 	ConditionPropertyAuthProviderID         ConditionProperty = "auth_provider_id"
+	ConditionPropertyCurrentUTCDatetime     ConditionProperty = "current_utc_datetime"
 	ConditionPropertyClientVerified         ConditionProperty = "client_verified"
 )
 
@@ -25,12 +26,40 @@ const (
 	ConditionOperatorIsNotIn     ConditionOperator = "is_not_in"
 	ConditionOperatorIsInCIDR    ConditionOperator = "is_in_cidr"
 	ConditionOperatorIsNotInCIDR ConditionOperator = "is_not_in_cidr"
-	ConditionOperatorIs          ConditionOperator = "is"
+
+	// ConditionOperatorIsInDayOfWeekTimeRanges matches when the current
+	// time falls inside one of the given weekly windows. Each value is a
+	// "DAY/TIME_RANGES/TIMEZONE" string, where DAY is one of M T W R F S
+	// U (Monday through Sunday), TIME_RANGES is a comma-separated list of
+	// HH:MM-HH:MM ranges, and TIMEZONE is an IANA timezone name - for
+	// example "M/09:00-17:00/America/New_York".
+	//
+	// All three segments are required; the API rejects a value with no
+	// timezone. Days are specified one value per day, so a Monday-Friday
+	// window is five values, not one.
+	ConditionOperatorIsInDayOfWeekTimeRanges ConditionOperator = "is_in_day_of_week_time_ranges"
+
+	ConditionOperatorIs ConditionOperator = "is"
 )
 
-// Condition restricts when a Policy grants access. See the API's
-// policy schema for which Operators are valid for each Property and
-// how Values is interpreted.
+// Condition restricts when a Policy grants access. All Conditions on a
+// Policy must evaluate to true for access to be granted.
+//
+// Which Operators are valid, and how Values is interpreted, depends on
+// Property:
+//
+//   - [ConditionPropertyRemoteIPLocationRegion] with is_in / is_not_in:
+//     Values are ISO 3166-1 alpha-2 country codes, e.g. "US", "CA".
+//   - [ConditionPropertyRemoteIP] with is_in_cidr / is_not_in_cidr:
+//     Values are CIDR ranges, IPv4 or IPv6.
+//   - [ConditionPropertyAuthProviderID] with is_in / is_not_in: Values
+//     are authentication provider IDs (UUIDs).
+//   - [ConditionPropertyCurrentUTCDatetime] with
+//     is_in_day_of_week_time_ranges: each value is a
+//     "DAY/TIME_RANGES/TIMEZONE" string - see
+//     [ConditionOperatorIsInDayOfWeekTimeRanges].
+//   - [ConditionPropertyClientVerified] with is: Values is a
+//     single-element list holding "true" or "false".
 type Condition struct {
 	Property ConditionProperty `json:"property"`
 	Operator ConditionOperator `json:"operator"`
