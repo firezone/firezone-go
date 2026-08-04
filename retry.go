@@ -9,10 +9,10 @@ import (
 	"time"
 )
 
-// maxRetryBackoff caps the exponential fallback. Without it the 8th
-// attempt would sleep over two minutes, long past the point where a
-// caller would rather see the error.
-const maxRetryBackoff = 30 * time.Second
+// defaultMaxRetryWait caps how long a single retry will wait. Without a
+// cap the exponential curve reaches minutes, long past the point where
+// a caller would rather see the error. Override with [WithRetryMaxWait].
+const defaultMaxRetryWait = 30 * time.Second
 
 // maxRetryJitter caps the random padding added to every wait. The
 // padding exists to break up thundering herds: Terraform applies with
@@ -23,9 +23,7 @@ const maxRetryBackoff = 30 * time.Second
 const maxRetryJitter = 2 * time.Second
 
 // requestWithRetry calls rawRequest, retrying on HTTP 429 (rate
-// limited) responses. It waits for the duration in the response's
-// Retry-After header when present, falling back to exponential backoff
-// otherwise. Retrying is a request-level concern (not a
+// limited) responses. Retrying is a request-level concern (not a
 // http.RoundTripper-level one) because it needs structured access to
 // APIError.RetryAfter, which a RoundTripper wrapper would have to
 // re-parse the body to get.
@@ -47,14 +45,7 @@ func (c *Client) requestWithRetry(ctx context.Context, method, requestPath strin
 		}
 		lastErr = err
 
-		// Retry-After is a floor, not a target: waiting less than the
-		// server asked guarantees another 429. Jitter is therefore added
-		// on top of it, never subtracted from it.
-		wait := apiErr.RetryAfter
-		if wait <= 0 {
-			wait = exponentialBackoff(attempt)
-		}
-		wait += retryJitter(wait)
+		wait := c.retryWait(attempt, apiErr.RetryAfter)
 
 		select {
 		case <-ctx.Done():
@@ -66,17 +57,40 @@ func (c *Client) requestWithRetry(ctx context.Context, method, requestPath strin
 	return nil, lastErr
 }
 
-// exponentialBackoff returns 1s, 2s, 4s, 8s, ... for attempt 0, 1, 2, 3,
-// capped at maxRetryBackoff. Used as a fallback when a 429 response
-// carries no Retry-After header.
-func exponentialBackoff(attempt int) time.Duration {
-	// Guard the shift before math.Pow overflows into +Inf, which would
-	// convert to a nonsense Duration.
-	if attempt >= 30 {
-		return maxRetryBackoff
+// retryWait returns how long to sleep before the next attempt.
+//
+// Retry-After is treated as a floor, never a target: waiting less than
+// the server asked for guarantees another 429, so jitter is added on top
+// of it and never subtracted from it.
+//
+// It is only a floor, though. The header says when one token frees up,
+// not when this particular caller gets it - under concurrency the token
+// is usually taken by someone else. Backing off exponentially on top of
+// the floor is what lets a request that keeps losing eventually wait
+// long enough to win, instead of retrying every second until its budget
+// runs out.
+func (c *Client) retryWait(attempt int, retryAfter time.Duration) time.Duration {
+	wait := max(retryAfter, exponentialBackoff(attempt))
+	wait = min(wait, c.maxRetryWait())
+	return wait + retryJitter(wait)
+}
+
+func (c *Client) maxRetryWait() time.Duration {
+	if c.retryMaxWait > 0 {
+		return c.retryMaxWait
 	}
-	backoff := time.Duration(math.Pow(2, float64(attempt))) * time.Second
-	return min(backoff, maxRetryBackoff)
+	return defaultMaxRetryWait
+}
+
+// exponentialBackoff returns 1s, 2s, 4s, 8s, ... for attempt 0, 1, 2, 3.
+// The caller caps it; this only guards the arithmetic.
+func exponentialBackoff(attempt int) time.Duration {
+	// Bail out before math.Pow overflows into +Inf, which would convert
+	// to a nonsense Duration.
+	if attempt >= 30 {
+		return time.Duration(math.MaxInt64)
+	}
+	return time.Duration(math.Pow(2, float64(attempt))) * time.Second
 }
 
 // retryJitter returns a random padding of up to half the base wait,

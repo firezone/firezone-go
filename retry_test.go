@@ -189,3 +189,50 @@ func TestRetry_JitterDesynchronizesConcurrentCallers(t *testing.T) {
 			callers, waits)
 	}
 }
+
+// TestRetryWait_EscalatesAboveRetryAfter is the property this session's
+// second round of 429s exposed: with Retry-After alone the wait never
+// grew, so a request that kept losing the token race retried every
+// second until its budget ran out. The header says when a token frees
+// up, not who gets it.
+func TestRetryWait_EscalatesAboveRetryAfter(t *testing.T) {
+	client, err := firezone.NewClient("https://example.test", "token")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	const retryAfter = time.Second
+
+	var previous time.Duration
+	for attempt := range 6 {
+		wait := firezone.ExportedRetryWait(client, attempt, retryAfter)
+
+		if wait < retryAfter {
+			t.Errorf("attempt %d waited %v, below the %v Retry-After floor", attempt, wait, retryAfter)
+		}
+		if attempt > 0 && wait <= previous {
+			t.Errorf("attempt %d waited %v, not more than attempt %d's %v", attempt, wait, attempt-1, previous)
+		}
+		previous = wait
+	}
+}
+
+func TestRetryWait_RespectsMaxWait(t *testing.T) {
+	const cap = 5 * time.Second
+
+	client, err := firezone.NewClient("https://example.test", "token",
+		firezone.WithRetryMaxWait(cap))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	// Attempt 10 would be ~17 minutes uncapped. Jitter is added after
+	// the cap, so allow for its ceiling on top.
+	wait := firezone.ExportedRetryWait(client, 10, 0)
+	if wait > cap+2*time.Second {
+		t.Errorf("wait = %v, want no more than the %v cap plus jitter", wait, cap)
+	}
+	if wait < cap {
+		t.Errorf("wait = %v, want at least the %v cap", wait, cap)
+	}
+}

@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"path"
 	"strconv"
+	"time"
 )
 
 // requestBody is a request body captured as raw bytes rather than an
@@ -57,6 +58,7 @@ type Client struct {
 
 	retryEnabled bool
 	maxRetries   int
+	retryMaxWait time.Duration
 
 	// Sites manages Sites and, nested under them, Gateways.
 	Sites *SitesService
@@ -102,22 +104,34 @@ func WithUserAgent(ua string) Option {
 // burst, refilling at roughly one per second. A Terraform apply or
 // destroy at the default parallelism of 10 drains that burst almost
 // immediately and then proceeds at the refill rate, so a request can
-// legitimately need to wait out several seconds of queue ahead of it.
-// The budget is sized for that, not for a transient blip.
-const defaultMaxRetries = 8
+// legitimately need to wait out a long queue ahead of it. With waits
+// escalating to defaultMaxRetryWait, this budget covers a bit over two
+// minutes of sustained throttling.
+const defaultMaxRetries = 10
 
 // WithRetry configures automatic retry-with-backoff on HTTP 429
 // (rate limited) responses. Retries are enabled by default with a
 // budget of defaultMaxRetries.
 //
-// Waits honor the response's Retry-After header when present, falling
-// back to exponential backoff, and always add jitter so concurrent
-// callers don't retry in lockstep.
+// Waits escalate exponentially, never drop below the response's
+// Retry-After header, and always carry jitter so concurrent callers
+// don't retry in lockstep.
 func WithRetry(enabled bool, maxRetries int) Option {
 	return func(c *Client) {
 		c.retryEnabled = enabled
 		c.maxRetries = maxRetries
 	}
+}
+
+// WithRetryMaxWait caps how long any single retry waits, bounding the
+// exponential escalation. Zero or negative restores
+// defaultMaxRetryWait.
+//
+// Raise it when a large Terraform run is still exhausting its budget:
+// a higher cap buys more total patience per retry than more attempts
+// at a low cap does.
+func WithRetryMaxWait(d time.Duration) Option {
+	return func(c *Client) { c.retryMaxWait = d }
 }
 
 // NewClient constructs a Firezone API client. baseURL is the bare API
