@@ -91,7 +91,8 @@ func TestClientsService_List(t *testing.T) {
 		})(w, r)
 	}))
 
-	page, err := client.ClientDevices.List(context.Background(), &firezone.ListOptions{Limit: 100})
+	page, err := client.ClientDevices.List(context.Background(),
+		&firezone.ClientListOptions{ListOptions: firezone.ListOptions{Limit: 100}})
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
@@ -195,5 +196,56 @@ func TestClientsService_Get_NotFound(t *testing.T) {
 	_, err := client.ClientDevices.Get(context.Background(), "missing")
 	if !firezone.IsNotFound(err) {
 		t.Fatalf("IsNotFound(err) = false, want true (err: %v)", err)
+	}
+}
+
+func TestClientsService_List_Filters(t *testing.T) {
+	tests := []struct {
+		name      string
+		opts      *firezone.ClientListOptions
+		wantQuery string
+	}{
+		{
+			name:      "by name",
+			opts:      &firezone.ClientListOptions{Name: "jane-laptop"},
+			wantQuery: "name=jane-laptop",
+		},
+		{
+			name:      "by firezone_id",
+			opts:      &firezone.ClientListOptions{FirezoneID: "fz-abc123"},
+			wantQuery: "firezone_id=fz-abc123",
+		},
+		{
+			name:      "both",
+			opts:      &firezone.ClientListOptions{Name: "jane-laptop", FirezoneID: "fz-abc123"},
+			wantQuery: "firezone_id=fz-abc123&name=jane-laptop",
+		},
+		{
+			// nil opts must not send empty filter params, which the API
+			// would treat as "match the empty string".
+			name:      "no filters",
+			opts:      nil,
+			wantQuery: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotQuery string
+			client := testutil.NewClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotQuery = r.URL.RawQuery
+				testutil.JSONResponse(http.StatusOK, map[string]any{
+					"data":     []map[string]any{},
+					"metadata": map[string]any{"count": 0, "limit": 50},
+				})(w, r)
+			}))
+
+			if _, err := client.ClientDevices.List(context.Background(), tt.opts); err != nil {
+				t.Fatalf("List returned error: %v", err)
+			}
+			if gotQuery != tt.wantQuery {
+				t.Errorf("query = %q, want %q", gotQuery, tt.wantQuery)
+			}
+		})
 	}
 }

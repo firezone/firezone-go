@@ -61,14 +61,29 @@ func (s *ClientsService) Get(ctx context.Context, id string) (*ClientDevice, err
 	return &c, nil
 }
 
+// ClientListOptions extends ListOptions with Clients-specific filters.
+type ClientListOptions struct {
+	ListOptions
+	// Name filters to Clients with this exact name. Names are not
+	// unique, so this can still match more than one.
+	Name string
+	// FirezoneID filters to Clients with this exact Firezone ID. Unique
+	// per actor rather than per account, so this too can match more than
+	// one - though in practice rarely does.
+	FirezoneID string
+}
+
 // List returns a page of Clients. Pass nil for opts to use the API's
-// default page size.
-//
-// The endpoint has no filter parameters - not by name, actor, or
-// firezone_id - so narrowing the results means paginating and filtering
-// client-side.
-func (s *ClientsService) List(ctx context.Context, opts *ListOptions) (*Page[ClientDevice], error) {
-	return doList[ClientDevice](ctx, s.client, "GET", "clients", listOptionsToQuery(opts))
+// default page size and no filters.
+func (s *ClientsService) List(ctx context.Context, opts *ClientListOptions) (*Page[ClientDevice], error) {
+	if opts == nil {
+		opts = &ClientListOptions{}
+	}
+	q := filterQuery(opts.ListOptions,
+		[2]string{"name", opts.Name},
+		[2]string{"firezone_id", opts.FirezoneID},
+	)
+	return doList[ClientDevice](ctx, s.client, "GET", "clients", q)
 }
 
 // Update renames a Client.
