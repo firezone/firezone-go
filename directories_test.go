@@ -104,3 +104,85 @@ func TestOktaDirectoriesService_Get(t *testing.T) {
 		t.Errorf("dir = %+v, want {ID: dir-3, Name: Okta, OktaDomain: example.okta.com}", dir)
 	}
 }
+
+// TestDirectoriesService_List_NameFilter checks all three directory
+// services push the name filter to the API rather than scanning. These
+// endpoints gained a ?name= filter precisely so a data source read costs
+// one request instead of one per page of the account's directories.
+func TestDirectoriesService_List_NameFilter(t *testing.T) {
+	tests := []struct {
+		name     string
+		call     func(*firezone.Client, *firezone.DirectoryListOptions) error
+		wantPath string
+	}{
+		{
+			name: "entra",
+			call: func(c *firezone.Client, o *firezone.DirectoryListOptions) error {
+				_, err := c.EntraDirectories.List(context.Background(), o)
+				return err
+			},
+			wantPath: "/entra_directories",
+		},
+		{
+			name: "google",
+			call: func(c *firezone.Client, o *firezone.DirectoryListOptions) error {
+				_, err := c.GoogleDirectories.List(context.Background(), o)
+				return err
+			},
+			wantPath: "/google_directories",
+		},
+		{
+			name: "okta",
+			call: func(c *firezone.Client, o *firezone.DirectoryListOptions) error {
+				_, err := c.OktaDirectories.List(context.Background(), o)
+				return err
+			},
+			wantPath: "/okta_directories",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotPath, gotQuery string
+			client := testutil.NewClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath, gotQuery = r.URL.Path, r.URL.RawQuery
+				testutil.JSONResponse(http.StatusOK, map[string]any{
+					"data":     []map[string]any{},
+					"metadata": map[string]any{"count": 0, "limit": 50},
+				})(w, r)
+			}))
+
+			opts := &firezone.DirectoryListOptions{Name: "Corp Directory"}
+			if err := tt.call(client, opts); err != nil {
+				t.Fatalf("List returned error: %v", err)
+			}
+
+			if gotPath != tt.wantPath {
+				t.Errorf("path = %q, want %q", gotPath, tt.wantPath)
+			}
+			if gotQuery != "name=Corp+Directory" {
+				t.Errorf("query = %q, want name=Corp+Directory", gotQuery)
+			}
+		})
+
+		t.Run(tt.name+" nil opts", func(t *testing.T) {
+			var gotQuery string
+			client := testutil.NewClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotQuery = r.URL.RawQuery
+				testutil.JSONResponse(http.StatusOK, map[string]any{
+					"data":     []map[string]any{},
+					"metadata": map[string]any{"count": 0, "limit": 50},
+				})(w, r)
+			}))
+
+			// nil must stay valid and must not send an empty name, which
+			// the API would read as "match the empty string".
+			if err := tt.call(client, nil); err != nil {
+				t.Fatalf("List(nil) returned error: %v", err)
+			}
+			if gotQuery != "" {
+				t.Errorf("query = %q, want empty", gotQuery)
+			}
+		})
+	}
+}

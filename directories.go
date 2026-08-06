@@ -2,6 +2,7 @@ package firezone
 
 import (
 	"context"
+	"net/url"
 	"time"
 )
 
@@ -81,10 +82,20 @@ func (s *EntraDirectoriesService) Get(ctx context.Context, id string) (*EntraDir
 	return &d, nil
 }
 
+// DirectoryListOptions extends ListOptions with the filters every
+// directory list endpoint accepts. Shared across the three providers,
+// which expose the same filter surface.
+type DirectoryListOptions struct {
+	ListOptions
+	// Name filters to directories with this exact name, as shown in the
+	// dashboard's identity provider settings.
+	Name string
+}
+
 // List returns a page of Entra directories. Pass nil for opts to use
-// the API's default page size.
-func (s *EntraDirectoriesService) List(ctx context.Context, opts *ListOptions) (*Page[EntraDirectory], error) {
-	return doList[EntraDirectory](ctx, s.client, "GET", "entra_directories", listOptionsToQuery(opts))
+// the API's default page size and no filters.
+func (s *EntraDirectoriesService) List(ctx context.Context, opts *DirectoryListOptions) (*Page[EntraDirectory], error) {
+	return doList[EntraDirectory](ctx, s.client, "GET", "entra_directories", directoryQuery(opts))
 }
 
 // GoogleDirectoriesService reads Google Workspace directory connections.
@@ -104,8 +115,8 @@ func (s *GoogleDirectoriesService) Get(ctx context.Context, id string) (*GoogleD
 
 // List returns a page of Google Workspace directories. Pass nil for
 // opts to use the API's default page size.
-func (s *GoogleDirectoriesService) List(ctx context.Context, opts *ListOptions) (*Page[GoogleDirectory], error) {
-	return doList[GoogleDirectory](ctx, s.client, "GET", "google_directories", listOptionsToQuery(opts))
+func (s *GoogleDirectoriesService) List(ctx context.Context, opts *DirectoryListOptions) (*Page[GoogleDirectory], error) {
+	return doList[GoogleDirectory](ctx, s.client, "GET", "google_directories", directoryQuery(opts))
 }
 
 // OktaDirectoriesService reads Okta directory connections. Read-only:
@@ -125,6 +136,15 @@ func (s *OktaDirectoriesService) Get(ctx context.Context, id string) (*OktaDirec
 
 // List returns a page of Okta directories. Pass nil for opts to use the
 // API's default page size.
-func (s *OktaDirectoriesService) List(ctx context.Context, opts *ListOptions) (*Page[OktaDirectory], error) {
-	return doList[OktaDirectory](ctx, s.client, "GET", "okta_directories", listOptionsToQuery(opts))
+func (s *OktaDirectoriesService) List(ctx context.Context, opts *DirectoryListOptions) (*Page[OktaDirectory], error) {
+	return doList[OktaDirectory](ctx, s.client, "GET", "okta_directories", directoryQuery(opts))
+}
+
+// directoryQuery builds the query string for a directory list request,
+// tolerating a nil opts the way every List method's contract promises.
+func directoryQuery(opts *DirectoryListOptions) url.Values {
+	if opts == nil {
+		opts = &DirectoryListOptions{}
+	}
+	return filterQuery(opts.ListOptions, [2]string{"name", opts.Name})
 }
