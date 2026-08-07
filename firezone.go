@@ -73,6 +73,18 @@ type Client struct {
 	// ClientDevices manages Client devices. Named for [ClientDevice],
 	// since Clients is too easily confused with this type itself.
 	ClientDevices *ClientsService
+	// EmailOTPAuthProviders reads Email OTP auth providers (read-only).
+	EmailOTPAuthProviders *EmailOTPAuthProvidersService
+	// OIDCAuthProviders reads generic OIDC auth providers (read-only).
+	OIDCAuthProviders *OIDCAuthProvidersService
+	// GoogleAuthProviders reads Google Workspace auth providers
+	// (read-only).
+	GoogleAuthProviders *GoogleAuthProvidersService
+	// EntraAuthProviders reads Microsoft Entra auth providers
+	// (read-only).
+	EntraAuthProviders *EntraAuthProvidersService
+	// OktaAuthProviders reads Okta auth providers (read-only).
+	OktaAuthProviders *OktaAuthProvidersService
 	// EntraDirectories reads Microsoft Entra directory connections
 	// (read-only).
 	EntraDirectories *EntraDirectoriesService
@@ -162,6 +174,11 @@ func NewClient(baseURL, token string, opts ...Option) (*Client, error) {
 	c.Groups = &GroupsService{client: c}
 	c.Actors = &ActorsService{client: c}
 	c.ClientDevices = &ClientsService{client: c}
+	c.EmailOTPAuthProviders = &EmailOTPAuthProvidersService{client: c}
+	c.OIDCAuthProviders = &OIDCAuthProvidersService{client: c}
+	c.GoogleAuthProviders = &GoogleAuthProvidersService{client: c}
+	c.EntraAuthProviders = &EntraAuthProvidersService{client: c}
+	c.OktaAuthProviders = &OktaAuthProvidersService{client: c}
 	c.EntraDirectories = &EntraDirectoriesService{client: c}
 	c.GoogleDirectories = &GoogleDirectoriesService{client: c}
 	c.OktaDirectories = &OktaDirectoriesService{client: c}

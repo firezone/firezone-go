@@ -141,3 +141,128 @@ func TestGatewaysService_List_Filters(t *testing.T) {
 		})
 	}
 }
+
+// TestGatewaysService_Get_RotationState covers the fields that let a
+// caller tell "rotation pending" from "rotation complete". A rotation
+// is invisible without them: the API deletes the previous token once
+// the replacement is confirmed, so a Gateway that never picks its
+// replacement up is stranded with no other signal.
+func TestGatewaysService_Get_RotationState(t *testing.T) {
+	tests := []struct {
+		name        string
+		data        map[string]any
+		wantTokenID string
+		wantPending bool
+	}{
+		{
+			name: "connected, no rotation pending",
+			data: map[string]any{
+				"id": "gw-1", "name": "gw-nyc-1", "online": true,
+				"gateway_token_id": "tok-1",
+			},
+			wantTokenID: "tok-1",
+			wantPending: false,
+		},
+		{
+			name: "rotation pending",
+			data: map[string]any{
+				"id": "gw-1", "name": "gw-nyc-1", "online": true,
+				"gateway_token_id": "tok-1",
+				"rotated_at":       "2026-01-01T00:00:00Z",
+			},
+			wantTokenID: "tok-1",
+			wantPending: true,
+		},
+		{
+			// A Gateway that has never connected reports neither field.
+			name:        "never connected",
+			data:        map[string]any{"id": "gw-1", "name": "gw-nyc-1", "online": false},
+			wantTokenID: "",
+			wantPending: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := testutil.NewClient(t, testutil.JSONResponse(http.StatusOK, map[string]any{
+				"data": tt.data,
+			}))
+
+			gateway, err := client.Sites.Gateways("site-1").Get(context.Background(), "gw-1")
+			if err != nil {
+				t.Fatalf("Get returned error: %v", err)
+			}
+
+			if gateway.GatewayTokenID != tt.wantTokenID {
+				t.Errorf("GatewayTokenID = %q, want %q", gateway.GatewayTokenID, tt.wantTokenID)
+			}
+			if got := gateway.RotationPending(); got != tt.wantPending {
+				t.Errorf("RotationPending() = %v, want %v (RotatedAt: %v)",
+					got, tt.wantPending, gateway.RotatedAt)
+			}
+			// RotatedAt is a pointer so "never rotated" stays
+			// distinguishable from the zero time rather than collapsing
+			// into it - RotationPending depends on that.
+			if tt.wantPending && gateway.RotatedAt == nil {
+				t.Error("RotatedAt = nil, want a timestamp")
+			}
+			if !tt.wantPending && gateway.RotatedAt != nil {
+				t.Errorf("RotatedAt = %v, want nil", gateway.RotatedAt)
+			}
+		})
+	}
+}
+
+// TestProvisionedGateway_NoRotationPending guards the newly provisioned
+// case: Provision embeds Gateway, so the rotation fields come along, and
+// a brand-new Gateway must never look like it has a rotation pending.
+func TestProvisionedGateway_NoRotationPending(t *testing.T) {
+	client := testutil.NewClient(t, testutil.JSONResponse(http.StatusCreated, map[string]any{
+		"data": map[string]any{"id": "gw-1", "name": "gw-nyc-1", "token": "secret"},
+	}))
+
+	provisioned, err := client.Sites.Gateways("site-1").
+		Provision(context.Background(), &firezone.ProvisionGatewayRequest{Name: "gw-nyc-1"})
+	if err != nil {
+		t.Fatalf("Provision returned error: %v", err)
+	}
+
+	if provisioned.Token != "secret" {
+		t.Errorf("Token = %q, want secret", provisioned.Token)
+	}
+	if provisioned.RotationPending() {
+		t.Error("RotationPending() = true on a newly provisioned Gateway, want false")
+	}
+}
+
+func TestGatewaysService_RotateToken(t *testing.T) {
+	var gotMethod, gotPath string
+	client := testutil.NewClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		testutil.JSONResponse(http.StatusCreated, map[string]any{
+			"data": map[string]any{"id": "tok-2", "token": "new-secret"},
+		})(w, r)
+	}))
+
+	rotated, err := client.Sites.Gateways("site-1").RotateToken(context.Background(), "gw-1")
+	if err != nil {
+		t.Fatalf("RotateToken returned error: %v", err)
+	}
+
+	if gotMethod != http.MethodPost || gotPath != "/sites/site-1/gateways/gw-1/token/rotate" {
+		t.Errorf("request = %s %s, want POST /sites/site-1/gateways/gw-1/token/rotate",
+			gotMethod, gotPath)
+	}
+	if rotated.ID != "tok-2" || rotated.Token != "new-secret" {
+		t.Errorf("rotated = %+v, want ID=tok-2 Token=new-secret", rotated)
+	}
+}
+
+func TestGatewaysService_RotateToken_NotFound(t *testing.T) {
+	client := testutil.NewClient(t, testutil.ProblemResponse(http.StatusNotFound, "not found"))
+
+	_, err := client.Sites.Gateways("site-1").RotateToken(context.Background(), "missing")
+	if !firezone.IsNotFound(err) {
+		t.Fatalf("IsNotFound(err) = false, want true (err: %v)", err)
+	}
+}

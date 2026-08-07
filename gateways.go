@@ -1,6 +1,9 @@
 package firezone
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Gateway is a Firezone Gateway - a host that exposes a Site's
 // Resources to Clients. Gateways self-register their IP addresses on
@@ -11,6 +14,29 @@ type Gateway struct {
 	IPv4   string `json:"ipv4"`
 	IPv6   string `json:"ipv6"`
 	Online bool   `json:"online"`
+
+	// GatewayTokenID is the token this Gateway last connected with.
+	// Empty until the Gateway connects for the first time.
+	GatewayTokenID string `json:"gateway_token_id,omitempty"`
+
+	// RotatedAt is when the token named by GatewayTokenID was rotated
+	// out, and is nil in the normal case. A non-nil value means a
+	// replacement token has been minted and this Gateway has not picked
+	// it up yet - see [Gateway.RotationPending].
+	RotatedAt *time.Time `json:"rotated_at,omitempty"`
+}
+
+// RotationPending reports whether a replacement token has been minted
+// that this Gateway has not yet connected with.
+//
+// While it is true the current token stays valid only until the Gateway
+// connects with the replacement or the API's rotation grace period
+// elapses from [Gateway.RotatedAt], whichever comes first. A Gateway
+// left in this state past the grace period is stranded: the API deletes
+// the previous token once the replacement is confirmed, so rolling a
+// host's configuration back to it will not work.
+func (g *Gateway) RotationPending() bool {
+	return g.RotatedAt != nil
 }
 
 // ProvisionedGateway is a newly provisioned Gateway along with its
@@ -31,6 +57,18 @@ type ProvisionedGateway struct {
 // random name when omitted.
 type ProvisionGatewayRequest struct {
 	Name string `json:"name,omitempty"`
+}
+
+// RotatedGatewayToken is the replacement token minted by
+// [GatewaysService.RotateToken]. Like [ProvisionedGateway.Token], the
+// secret is shown exactly once.
+type RotatedGatewayToken struct {
+	// ID is the new token's ID, which becomes the Gateway's
+	// GatewayTokenID once it connects with this token.
+	ID string `json:"id"`
+	// Token is the replacement secret. Store it securely - it cannot be
+	// retrieved again.
+	Token string `json:"token"`
 }
 
 // UpdateGatewayRequest is the request body for [GatewaysService.Update].
@@ -112,6 +150,34 @@ func (s *GatewaysService) Update(ctx context.Context, id string, req *UpdateGate
 		return nil, err
 	}
 	return &gateway, nil
+}
+
+// RotateToken mints a replacement single-owner token for the Gateway,
+// returning the new secret once.
+//
+// The Gateway's current token is not invalidated immediately: it keeps
+// working until the Gateway first connects with the replacement or the
+// API's grace period elapses, whichever comes first. That window is the
+// point - it exists so the replacement can be delivered to the Gateway
+// host without downtime.
+//
+// Two consequences worth planning for:
+//
+//   - Deliver the replacement and restart the Gateway before the grace
+//     period expires, or the Gateway is stranded. Poll
+//     [Gateway.RotationPending] to confirm pickup.
+//   - Once pickup is confirmed the previous token is deleted, so rolling
+//     a host's configuration back to it will not work.
+//
+// Rotating again before the Gateway picks up a pending replacement
+// replaces only that pending token; the in-use one keeps its original
+// deadline.
+func (s *GatewaysService) RotateToken(ctx context.Context, id string) (*RotatedGatewayToken, error) {
+	var rotated RotatedGatewayToken
+	if err := s.client.do(ctx, "POST", s.basePath()+"/"+id+"/token/rotate", nil, nil, &rotated); err != nil {
+		return nil, err
+	}
+	return &rotated, nil
 }
 
 // Delete deletes a Gateway, revoking its token.
