@@ -5,14 +5,24 @@ import "context"
 // ResourceType is the type of network object a Resource represents.
 type ResourceType string
 
-// Resource types accepted by [ResourcesService.Create] and
-// [ResourcesService.Update]. "internet" also exists but is
-// API-read-only - the API returns 403 if you try to create or update
-// one, so it's deliberately not offered as a constant here.
+// Resource types. "internet" also exists but is API-read-only - the API
+// returns 403 if you try to create or update one - so it's deliberately
+// not offered as a constant here.
 const (
-	ResourceTypeCIDR             ResourceType = "cidr"
-	ResourceTypeIP               ResourceType = "ip"
-	ResourceTypeDNS              ResourceType = "dns"
+	ResourceTypeCIDR ResourceType = "cidr"
+	ResourceTypeIP   ResourceType = "ip"
+	ResourceTypeDNS  ResourceType = "dns"
+
+	// ResourceTypeStaticDevicePool is currently readable but not
+	// creatable: the API rejects any request that changes a Resource's
+	// type to it, on both create and update, with a 422. Create device
+	// pools in the admin portal instead.
+	//
+	// The constant stays because existing pools are still returned by
+	// Get and List, still filterable via [ResourceListOptions.Type], and
+	// still updatable and deletable - only the transition into this type
+	// is refused. Note that restating an existing pool's own type on an
+	// update is not a transition and is accepted.
 	ResourceTypeStaticDevicePool ResourceType = "static_device_pool"
 )
 
@@ -135,8 +145,11 @@ func (s *ResourcesService) List(ctx context.Context, opts *ResourceListOptions) 
 	return doList[Resource](ctx, s.client, "GET", "resources", q)
 }
 
-// Create creates a new Resource. Note: type "internet" cannot be
-// created via the API - the API returns 403 Forbidden.
+// Create creates a new Resource.
+//
+// Two types cannot be created: "internet" (403 Forbidden) and
+// [ResourceTypeStaticDevicePool] (422) - create device pools in the
+// admin portal instead.
 func (s *ResourcesService) Create(ctx context.Context, req *CreateResourceRequest) (*Resource, error) {
 	body, err := wrapBody("resource", req)
 	if err != nil {
@@ -150,6 +163,11 @@ func (s *ResourcesService) Create(ctx context.Context, req *CreateResourceReques
 }
 
 // Update updates a Resource.
+//
+// Changing a Resource's type to [ResourceTypeStaticDevicePool] is
+// refused with a 422, the same as creating one. Restating an existing
+// pool's own type is not a change and is accepted, so a caller that
+// echoes the whole Resource back on update still works.
 func (s *ResourcesService) Update(ctx context.Context, id string, req *UpdateResourceRequest) (*Resource, error) {
 	body, err := wrapBody("resource", req)
 	if err != nil {

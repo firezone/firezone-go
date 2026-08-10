@@ -107,3 +107,48 @@ func TestResourcesService_List_Filters(t *testing.T) {
 		})
 	}
 }
+
+// TestResourcesService_Create_DevicePoolRejected documents the API's
+// current refusal to create device pools. The SDK doesn't block it
+// client-side - it has no way to know the restriction has been lifted -
+// so this pins the error surface callers should branch on.
+func TestResourcesService_Create_DevicePoolRejected(t *testing.T) {
+	client := testutil.NewClient(t, testutil.ProblemResponse(
+		http.StatusUnprocessableEntity, "The request body failed validation."))
+
+	_, err := client.Resources.Create(context.Background(), &firezone.CreateResourceRequest{
+		Name: "field-laptops",
+		Type: firezone.ResourceTypeStaticDevicePool,
+	})
+	if !firezone.IsValidation(err) {
+		t.Fatalf("IsValidation(err) = false, want true (err: %v)", err)
+	}
+}
+
+// TestResourcesService_List_FilterByDevicePool guards the reason the
+// constant still exists: existing pools remain readable and filterable
+// even though they can't be created.
+func TestResourcesService_List_FilterByDevicePool(t *testing.T) {
+	var gotQuery string
+	client := testutil.NewClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		testutil.JSONResponse(http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{"id": "res-1", "name": "field-laptops", "type": "static_device_pool"},
+			},
+			"metadata": map[string]any{"count": 1, "limit": 50},
+		})(w, r)
+	}))
+
+	page, err := client.Resources.List(context.Background(),
+		&firezone.ResourceListOptions{Type: firezone.ResourceTypeStaticDevicePool})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if gotQuery != "type=static_device_pool" {
+		t.Errorf("query = %q, want type=static_device_pool", gotQuery)
+	}
+	if len(page.Data) != 1 || page.Data[0].Type != firezone.ResourceTypeStaticDevicePool {
+		t.Errorf("page.Data = %+v, want one static_device_pool Resource", page.Data)
+	}
+}
