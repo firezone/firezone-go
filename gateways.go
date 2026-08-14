@@ -6,8 +6,12 @@ import (
 )
 
 // Gateway is a Firezone Gateway - a host that exposes a Site's
-// Resources to Clients. Gateways self-register their IP addresses on
-// first connect, so IPv4/IPv6 are empty until then.
+// Resources to Clients.
+//
+// IPv4 and IPv6 are the Gateway's tunnel addresses, allocated when the
+// Gateway is created rather than on first connect, so both are always
+// populated - including on a Gateway that has never connected. See
+// LastSeenRemoteIP on the API's own responses for the public address.
 type Gateway struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
