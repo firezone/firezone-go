@@ -45,6 +45,12 @@ type membershipActorIDs struct {
 // Prefer [Patch] when multiple independent callers manage membership on
 // the same Group - ReplaceAll from more than one caller will overwrite
 // each other's changes.
+//
+// Members that are not changing keep their server-side membership rows,
+// so replacing a list with itself is a no-op rather than a full
+// rewrite. Repeating an ID in actorIDs is not an error; the list is
+// deduplicated. The returned IDs are sorted, not echoed back in the
+// order they were sent.
 func (s *MembershipsService) ReplaceAll(ctx context.Context, actorIDs []string) ([]string, error) {
 	entries := make([]membershipEntry, len(actorIDs))
 	for i, id := range actorIDs {
@@ -65,6 +71,13 @@ func (s *MembershipsService) ReplaceAll(ctx context.Context, actorIDs []string) 
 // other membership, returning the resulting member actor IDs. This is
 // the safe choice when more than one caller manages membership on the
 // same Group independently.
+//
+// The operation is idempotent - adding an actor already in the Group
+// and removing one that isn't are both no-ops - so a request that may
+// already have been applied is safe to retry. Removals are applied
+// before additions, so an ID passed in both add and remove ends up a
+// member. Repeating an ID within either list is not an error; both are
+// deduplicated. The returned IDs are sorted.
 func (s *MembershipsService) Patch(ctx context.Context, add, remove []string) ([]string, error) {
 	body, err := wrapBody("memberships", membershipPatchBody{Add: add, Remove: remove})
 	if err != nil {
