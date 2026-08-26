@@ -86,3 +86,8 @@ To get a token for the acceptance tests, boot `mix phx.server` in a
 `elixir/script/seed_api_client_token.exs` - see the
 [`terraform-provider-firezone`](https://github.com/firezone/terraform-provider-firezone)
 README's "Local development" section for the full sequence.
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and
+[NOTICE](NOTICE) for details.
