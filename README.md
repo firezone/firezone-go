@@ -1,4 +1,4 @@
-# firezone (api-client)
+# Go Firezone
 
 A Go client for the Firezone REST API.
 
@@ -22,29 +22,49 @@ gw, err := client.Sites.Gateways(site.ID).Provision(ctx, &firezone.ProvisionGate
 	Name: "gw-nyc-1",
 })
 // gw.Token is only ever returned here, on Provision - the API never
-// re-exposes it. See the Gateway type's doc comment before storing it
-// anywhere long-lived.
+// re-exposes it. See the ProvisionedGateway type's doc comment before
+// storing it anywhere long-lived.
 ```
 
 `baseURL` passed to `NewClient` is always the bare API host
 (`https://api.firezone.dev`).
 
+## Requirements
+
+Go 1.22 or newer. The SDK has no third-party dependencies — standard
+library only. CI builds against both the current Go release and the
+1.22 floor, so the minimum is tested rather than assumed.
+
 ## Resources
 
-`Client` exposes one service per resource:
+`Client` exposes one service per resource. These are read-write:
+
 * `Sites`
 * `Resources`
 * `Policies`
 * `Groups`
 * `Actors`
-* `Gateways` nested under `Sites` (`client.Sites.Gateways(siteID)`)
+* `ClientDevices` — Client devices. Named for `ClientDevice`, since
+  `Clients` reads as the SDK's own client type.
 
-This matches the API's own URL nesting.
+These are read-only (list and get only):
+
+* `EmailOTPAuthProviders`, `OIDCAuthProviders`, `GoogleAuthProviders`,
+  `EntraAuthProviders`, `OktaAuthProviders`
+* `EntraDirectories`, `GoogleDirectories`, `OktaDirectories`
+
+Three services are nested under a parent, matching the API's own URL
+nesting:
+
+* `client.Sites.Gateways(siteID)`
+* `client.Groups.Memberships(groupID)`
+* `client.Resources.PoolMembers(resourceID)`
 
 Every list method takes `*ListOptions{Limit, PageCursor}` and returns a
 `*Page[T]{Data, Metadata}`. See the resource file for each type's exact
 fields (`sites.go`, `resources.go`, `policies.go`, `groups.go`,
-`memberships.go`, `actors.go`, `gateways.go`).
+`memberships.go`, `actors.go`, `gateways.go`, `clients.go`,
+`auth_providers.go`, `directories.go`, `pool_members.go`).
 
 ## Errors
 
@@ -67,7 +87,7 @@ case firezone.IsUnauthorized(err):
 ## Retries
 
 Requests are retried automatically on HTTP 429 with exponential
-backoff, honoring the API's `Retry-After` header (5 attempts by
+backoff, honoring the API's `Retry-After` header (10 attempts by
 default). Disable or tune this via `firezone.WithRetry`:
 
 ```go
@@ -77,7 +97,11 @@ client, _ := firezone.NewClient(endpoint, token, firezone.WithRetry(false, 0))
 ## Testing
 
 ```bash
+mise run check             # everything CI runs, in one shot
 mise run test              # unit tests, no server needed (httptest-based)
+mise run test-floor        # build + test on the oldest supported Go
+mise run spec-check        # struct tags vs the OpenAPI spec
+mise run vuln              # govulncheck
 mise run test-acceptance   # requires FIREZONE_ENDPOINT/FIREZONE_TOKEN
 ```
 

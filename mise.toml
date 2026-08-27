@@ -22,6 +22,7 @@ description = "go vet (CI check)"
 run = """
 go vet ./...
 go vet -tags=integration ./...
+go vet -tags=spec ./...
 """
 
 [tasks.lint]
@@ -51,6 +52,18 @@ GOTOOLCHAIN=$floor go vet ./...
 GOTOOLCHAIN=$floor go test ./... -count=1
 """
 
+# Checks every JSON struct tag against Firezone's published OpenAPI
+# spec. Unit tests can't catch a misspelled field - they assert against
+# fixtures written by the same hand as the tag - so this is the only
+# thing that verifies what the server actually sends.
+#
+# Skips when it can't find a spec, so it stays safe inside `check`.
+# Point it at one explicitly with:
+#   FIREZONE_OPENAPI=/path/to/openapi.json mise run spec-check
+[tasks.spec-check]
+description = "Check struct tags against the OpenAPI spec (skips if no spec found)"
+run = "go test -tags=spec ./... -run TestSpecConformance -count=1 -v"
+
 [tasks.vuln]
 description = "govulncheck (CI check)"
 run = "govulncheck ./..."
@@ -61,4 +74,4 @@ run = "go build ./..."
 
 [tasks.check]
 description = "Run all CI static analysis + unit test checks (matches CI)"
-depends = ["fmt-check", "vet", "lint", "test", "vuln", "build"]
+depends = ["fmt-check", "vet", "lint", "test", "spec-check", "vuln", "build"]
