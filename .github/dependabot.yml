@@ -14,8 +14,6 @@ updates:
       actions:
         patterns: ["*"]
 
-  # No dependencies today (the SDK is stdlib-only), but this costs
-  # nothing now and starts working the moment a go.sum exists.
   - package-ecosystem: gomod
     directory: "/"
     schedule:
