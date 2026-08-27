@@ -38,13 +38,20 @@ jobs:
           reshim: true
           cache_key_prefix: "mise-v1"
 
+      # Keyed on the toolchain files, not just go.sum: this cache holds
+      # compiled stdlib and GOTOOLCHAIN-downloaded toolchains, so a Go
+      # version bump invalidates all of it while go.mod never moves.
+      # go.sum is listed for the day dependencies exist - hashFiles
+      # ignores paths that don't match, so its absence is harmless.
       - name: Restore Go build and module cache
         uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          key: >-
+            go-${{ runner.os }}-${{ hashFiles('.tool-versions', 'mise.toml',
+            'go.mod', 'go.sum') }}
           restore-keys: go-${{ runner.os }}-
 
       # Mirrors `mise run check` - the composite task developers run
@@ -89,13 +96,16 @@ jobs:
           reshim: true
           cache_key_prefix: "mise-v1"
 
+      # Same inputs as the check job. mise.toml matters most here
       - name: Restore Go build and module cache
         uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-floor-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          key: >-
+            go-floor-${{ runner.os }}-${{ hashFiles('.tool-versions',
+            'mise.toml', 'go.mod', 'go.sum') }}
           restore-keys: go-floor-${{ runner.os }}-
 
       # GOTOOLCHAIN makes the modern toolchain fetch and hand off to the
