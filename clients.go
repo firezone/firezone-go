@@ -42,9 +42,11 @@ type ClientDevice struct {
 }
 
 // UpdateClientRequest is the request body for [ClientsService.Update].
-// Name is the only mutable field.
+// Name is the only mutable field, and the API requires it, so it is
+// always sent - omitting it on an empty value would produce a body the
+// API rejects for a reason that doesn't name the field.
 type UpdateClientRequest struct {
-	Name string `json:"name,omitempty"`
+	Name string `json:"name"`
 }
 
 // ClientsService manages Clients.
