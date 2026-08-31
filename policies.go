@@ -93,12 +93,17 @@ type CreatePolicyRequest struct {
 // Setting IsDisabled to true stops the Policy granting access without
 // deleting it.
 type UpdatePolicyRequest struct {
-	GroupID               string      `json:"group_id,omitempty"`
-	ResourceID            string      `json:"resource_id,omitempty"`
-	Description           string      `json:"description,omitempty"`
-	FlowLogUploadsEnabled *bool       `json:"flow_log_uploads_enabled,omitempty"`
-	IsDisabled            *bool       `json:"is_disabled,omitempty"`
-	Conditions            []Condition `json:"conditions,omitempty"`
+	GroupID    string `json:"group_id,omitempty"`
+	ResourceID string `json:"resource_id,omitempty"`
+	// Description is nullable, so it is typed [Null] - Clear[string]()
+	// removes it, and a nil pointer leaves it alone.
+	Description           *Null[string] `json:"description,omitempty"`
+	FlowLogUploadsEnabled *bool         `json:"flow_log_uploads_enabled,omitempty"`
+	IsDisabled            *bool         `json:"is_disabled,omitempty"`
+	// Conditions replaces the Policy's conditions wholesale. nil leaves
+	// them unchanged; a pointer to an empty slice removes all of them,
+	// making the Policy grant access unconditionally.
+	Conditions *[]Condition `json:"conditions,omitempty"`
 }
 
 // PoliciesService manages Policies.
@@ -108,8 +113,11 @@ type PoliciesService struct {
 
 // Get fetches a single Policy by ID.
 func (s *PoliciesService) Get(ctx context.Context, id string) (*Policy, error) {
+	if err := checkID("Policy ID", id); err != nil {
+		return nil, err
+	}
 	var policy Policy
-	if err := s.client.do(ctx, "GET", "policies/"+id, nil, nil, &policy); err != nil {
+	if err := s.client.do(ctx, "GET", buildPath("policies", id), nil, nil, &policy); err != nil {
 		return nil, err
 	}
 	return &policy, nil
@@ -152,12 +160,15 @@ func (s *PoliciesService) Create(ctx context.Context, req *CreatePolicyRequest) 
 
 // Update updates a Policy.
 func (s *PoliciesService) Update(ctx context.Context, id string, req *UpdatePolicyRequest) (*Policy, error) {
+	if err := checkID("Policy ID", id); err != nil {
+		return nil, err
+	}
 	body, err := wrapBody("policy", req)
 	if err != nil {
 		return nil, err
 	}
 	var policy Policy
-	if err := s.client.do(ctx, "PUT", "policies/"+id, nil, body, &policy); err != nil {
+	if err := s.client.do(ctx, "PATCH", buildPath("policies", id), nil, body, &policy); err != nil {
 		return nil, err
 	}
 	return &policy, nil
@@ -165,7 +176,10 @@ func (s *PoliciesService) Update(ctx context.Context, id string, req *UpdatePoli
 
 // Delete deletes a Policy.
 func (s *PoliciesService) Delete(ctx context.Context, id string) error {
-	return s.client.do(ctx, "DELETE", "policies/"+id, nil, nil, nil)
+	if err := checkID("Policy ID", id); err != nil {
+		return err
+	}
+	return s.client.do(ctx, "DELETE", buildPath("policies", id), nil, nil, nil)
 }
 
 // Disable disables a Policy, stopping it granting access without
@@ -175,6 +189,9 @@ func (s *PoliciesService) Delete(ctx context.Context, id string) error {
 // This is a convenience wrapper over [PoliciesService.Update]; the API
 // has no dedicated disable endpoint.
 func (s *PoliciesService) Disable(ctx context.Context, id string) (*Policy, error) {
+	if err := checkID("Policy ID", id); err != nil {
+		return nil, err
+	}
 	disabled := true
 	return s.Update(ctx, id, &UpdatePolicyRequest{IsDisabled: &disabled})
 }
@@ -185,6 +202,9 @@ func (s *PoliciesService) Disable(ctx context.Context, id string) (*Policy, erro
 // This is a convenience wrapper over [PoliciesService.Update]; the API
 // has no dedicated enable endpoint.
 func (s *PoliciesService) Enable(ctx context.Context, id string) (*Policy, error) {
+	if err := checkID("Policy ID", id); err != nil {
+		return nil, err
+	}
 	disabled := false
 	return s.Update(ctx, id, &UpdatePolicyRequest{IsDisabled: &disabled})
 }

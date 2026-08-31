@@ -69,6 +69,13 @@ jobs:
       - name: Unit tests (-race)
         run: mise run test
 
+      # The only check that can catch a struct tag the server doesn't
+      # actually send. It runs against the spec vendored in testdata/,
+      # so it needs no monorepo checkout for now. In the future the
+      # spec will be retrieved from a live source.
+      - name: Check struct tags against the OpenAPI spec
+        run: mise run spec-check
+
       - name: Scan for known vulnerabilities (govulncheck)
         run: mise run vuln
 

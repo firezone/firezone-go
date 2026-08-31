@@ -18,11 +18,20 @@ import (
 // that). The server is closed automatically via t.Cleanup.
 func NewClient(t *testing.T, handler http.Handler) *firezone.Client {
 	t.Helper()
+	return NewClientWithOptions(t, handler)
+}
+
+// NewClientWithOptions is NewClient with extra options appended, for
+// tests that need to configure the client under test. Retries stay
+// disabled unless an option re-enables them.
+func NewClientWithOptions(t *testing.T, handler http.Handler, opts ...firezone.Option) *firezone.Client {
+	t.Helper()
 
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	client, err := firezone.NewClient(server.URL, "test-token", firezone.WithRetry(false, 0))
+	client, err := firezone.NewClient(server.URL, "test-token",
+		append([]firezone.Option{firezone.WithRetry(false, 0)}, opts...)...)
 	if err != nil {
 		t.Fatalf("testutil: building client: %v", err)
 	}

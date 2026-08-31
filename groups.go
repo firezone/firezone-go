@@ -49,8 +49,11 @@ func (s *GroupsService) Memberships(groupID string) *MembershipsService {
 
 // Get fetches a single Group by ID.
 func (s *GroupsService) Get(ctx context.Context, id string) (*Group, error) {
+	if err := checkID("Group ID", id); err != nil {
+		return nil, err
+	}
 	var group Group
-	if err := s.client.do(ctx, "GET", "groups/"+id, nil, nil, &group); err != nil {
+	if err := s.client.do(ctx, "GET", buildPath("groups", id), nil, nil, &group); err != nil {
 		return nil, err
 	}
 	return &group, nil
@@ -106,12 +109,15 @@ func (s *GroupsService) Create(ctx context.Context, req *CreateGroupRequest) (*G
 // Update updates a Group. Returns 403 Forbidden if the Group is synced
 // from an identity provider (see [Group.IsSynced]).
 func (s *GroupsService) Update(ctx context.Context, id string, req *UpdateGroupRequest) (*Group, error) {
+	if err := checkID("Group ID", id); err != nil {
+		return nil, err
+	}
 	body, err := wrapBody("group", req)
 	if err != nil {
 		return nil, err
 	}
 	var group Group
-	if err := s.client.do(ctx, "PUT", "groups/"+id, nil, body, &group); err != nil {
+	if err := s.client.do(ctx, "PATCH", buildPath("groups", id), nil, body, &group); err != nil {
 		return nil, err
 	}
 	return &group, nil
@@ -120,5 +126,8 @@ func (s *GroupsService) Update(ctx context.Context, id string, req *UpdateGroupR
 // Delete deletes a Group. Returns 403 Forbidden if the Group is synced
 // from an identity provider (see [Group.IsSynced]).
 func (s *GroupsService) Delete(ctx context.Context, id string) error {
-	return s.client.do(ctx, "DELETE", "groups/"+id, nil, nil, nil)
+	if err := checkID("Group ID", id); err != nil {
+		return err
+	}
+	return s.client.do(ctx, "DELETE", buildPath("groups", id), nil, nil, nil)
 }

@@ -25,8 +25,8 @@ func TestActorsService_DisableEnable(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Disable returned error: %v", err)
 		}
-		if gotMethod != http.MethodPut || gotPath != "/actors/actor-1" {
-			t.Errorf("request = %s %s, want PUT /actors/actor-1", gotMethod, gotPath)
+		if gotMethod != http.MethodPatch || gotPath != "/actors/actor-1" {
+			t.Errorf("request = %s %s, want PATCH /actors/actor-1", gotMethod, gotPath)
 		}
 
 		reqActor, ok := gotBody["actor"].(map[string]any)
@@ -61,8 +61,8 @@ func TestActorsService_DisableEnable(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Enable returned error: %v", err)
 		}
-		if gotMethod != http.MethodPut || gotPath != "/actors/actor-1" {
-			t.Errorf("request = %s %s, want PUT /actors/actor-1", gotMethod, gotPath)
+		if gotMethod != http.MethodPatch || gotPath != "/actors/actor-1" {
+			t.Errorf("request = %s %s, want PATCH /actors/actor-1", gotMethod, gotPath)
 		}
 
 		reqActor, ok := gotBody["actor"].(map[string]any)

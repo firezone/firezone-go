@@ -17,9 +17,16 @@ type MembershipsService struct {
 	groupID string
 }
 
+func (s *MembershipsService) basePath() string {
+	return buildPath("groups", s.groupID, "memberships")
+}
+
 // List returns a page of the Group's members.
 func (s *MembershipsService) List(ctx context.Context, opts *ListOptions) (*Page[GroupMember], error) {
-	return doList[GroupMember](ctx, s.client, "GET", "groups/"+s.groupID+"/memberships", listOptionsToQuery(opts))
+	if err := checkID("Group ID", s.groupID); err != nil {
+		return nil, err
+	}
+	return doList[GroupMember](ctx, s.client, "GET", s.basePath(), listOptionsToQuery(opts))
 }
 
 // membershipEntry is the wire shape of one entry in a ReplaceAll request.
@@ -52,6 +59,9 @@ type membershipActorIDs struct {
 // deduplicated. The returned IDs are sorted, not echoed back in the
 // order they were sent.
 func (s *MembershipsService) ReplaceAll(ctx context.Context, actorIDs []string) ([]string, error) {
+	if err := checkID("Group ID", s.groupID); err != nil {
+		return nil, err
+	}
 	entries := make([]membershipEntry, len(actorIDs))
 	for i, id := range actorIDs {
 		entries[i] = membershipEntry{ActorID: id}
@@ -61,7 +71,7 @@ func (s *MembershipsService) ReplaceAll(ctx context.Context, actorIDs []string) 
 		return nil, err
 	}
 	var result membershipActorIDs
-	if err := s.client.do(ctx, "PUT", "groups/"+s.groupID+"/memberships", nil, body, &result); err != nil {
+	if err := s.client.do(ctx, "PUT", s.basePath(), nil, body, &result); err != nil {
 		return nil, err
 	}
 	return result.ActorIDs, nil
@@ -79,12 +89,15 @@ func (s *MembershipsService) ReplaceAll(ctx context.Context, actorIDs []string) 
 // member. Repeating an ID within either list is not an error; both are
 // deduplicated. The returned IDs are sorted.
 func (s *MembershipsService) Patch(ctx context.Context, add, remove []string) ([]string, error) {
+	if err := checkID("Group ID", s.groupID); err != nil {
+		return nil, err
+	}
 	body, err := wrapBody("memberships", membershipPatchBody{Add: add, Remove: remove})
 	if err != nil {
 		return nil, err
 	}
 	var result membershipActorIDs
-	if err := s.client.do(ctx, "PATCH", "groups/"+s.groupID+"/memberships", nil, body, &result); err != nil {
+	if err := s.client.do(ctx, "PATCH", s.basePath(), nil, body, &result); err != nil {
 		return nil, err
 	}
 	return result.ActorIDs, nil

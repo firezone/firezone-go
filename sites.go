@@ -34,8 +34,11 @@ func (s *SitesService) Gateways(siteID string) *GatewaysService {
 
 // Get fetches a single Site by ID.
 func (s *SitesService) Get(ctx context.Context, id string) (*Site, error) {
+	if err := checkID("site ID", id); err != nil {
+		return nil, err
+	}
 	var site Site
-	if err := s.client.do(ctx, "GET", "sites/"+id, nil, nil, &site); err != nil {
+	if err := s.client.do(ctx, "GET", buildPath("sites", id), nil, nil, &site); err != nil {
 		return nil, err
 	}
 	return &site, nil
@@ -73,12 +76,15 @@ func (s *SitesService) Create(ctx context.Context, req *CreateSiteRequest) (*Sit
 
 // Update updates a Site.
 func (s *SitesService) Update(ctx context.Context, id string, req *UpdateSiteRequest) (*Site, error) {
+	if err := checkID("site ID", id); err != nil {
+		return nil, err
+	}
 	body, err := wrapBody("site", req)
 	if err != nil {
 		return nil, err
 	}
 	var site Site
-	if err := s.client.do(ctx, "PUT", "sites/"+id, nil, body, &site); err != nil {
+	if err := s.client.do(ctx, "PATCH", buildPath("sites", id), nil, body, &site); err != nil {
 		return nil, err
 	}
 	return &site, nil
@@ -86,5 +92,8 @@ func (s *SitesService) Update(ctx context.Context, id string, req *UpdateSiteReq
 
 // Delete deletes a Site.
 func (s *SitesService) Delete(ctx context.Context, id string) error {
-	return s.client.do(ctx, "DELETE", "sites/"+id, nil, nil, nil)
+	if err := checkID("site ID", id); err != nil {
+		return err
+	}
+	return s.client.do(ctx, "DELETE", buildPath("sites", id), nil, nil, nil)
 }

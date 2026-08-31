@@ -39,6 +39,36 @@ func TestGroupsService_Get(t *testing.T) {
 	})
 }
 
+func TestGroupsService_Update(t *testing.T) {
+	var gotMethod, gotPath string
+	var gotBody map[string]any
+	client := testutil.NewClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		decodeJSONBody(t, r, &gotBody)
+		testutil.JSONResponse(http.StatusOK, map[string]any{
+			"data": map[string]any{"id": "group-1", "name": "renamed"},
+		})(w, r)
+	}))
+
+	group, err := client.Groups.Update(context.Background(), "group-1", &firezone.UpdateGroupRequest{Name: "renamed"})
+	if err != nil {
+		t.Fatalf("Update returned error: %v", err)
+	}
+	if gotMethod != http.MethodPatch || gotPath != "/groups/group-1" {
+		t.Errorf("request = %s %s, want PATCH /groups/group-1", gotMethod, gotPath)
+	}
+	reqGroup, ok := gotBody["group"].(map[string]any)
+	if !ok {
+		t.Fatalf("body[\"group\"] = %v, want an object", gotBody["group"])
+	}
+	if reqGroup["name"] != "renamed" {
+		t.Errorf("body group.name = %v, want renamed", reqGroup["name"])
+	}
+	if group.Name != "renamed" {
+		t.Errorf("group.Name = %q, want renamed", group.Name)
+	}
+}
+
 func TestGroupsService_Update_SyncedGroupForbidden(t *testing.T) {
 	client := testutil.NewClient(t, testutil.ProblemResponse(http.StatusForbidden, "Cannot update a synced Group"))
 

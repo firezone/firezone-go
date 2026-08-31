@@ -109,6 +109,12 @@ func parseRetryAfter(header string) time.Duration {
 func IsNotFound(err error) bool { return hasStatus(err, http.StatusNotFound) }
 
 // IsConflict reports whether err is an *APIError with StatusCode 409.
+//
+// The API returns 409 from a single endpoint - creating a token for a
+// Gateway that already has one - which this SDK does not wrap, for the
+// reasons in the [GatewaysService] doc comment. Most things that read
+// like conflicts, a duplicate name among them, come back as 422
+// validation errors instead, so reach for [IsValidation] first.
 func IsConflict(err error) bool { return hasStatus(err, http.StatusConflict) }
 
 // IsValidation reports whether err is an *APIError with StatusCode 422.

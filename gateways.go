@@ -83,19 +83,57 @@ type UpdateGatewayRequest struct {
 
 // GatewaysService manages the Gateways belonging to a single Site.
 // Obtain one via [SitesService.Gateways].
+//
+// # Token lifecycle
+//
+// A Gateway has at most one active token, and this service covers the
+// whole of that token's life: [GatewaysService.Provision] creates the
+// Gateway and mints its token together, [GatewaysService.RotateToken]
+// replaces it, and [GatewaysService.Delete] destroys the Gateway and
+// revokes it.
+//
+// Two API endpoints are deliberately left out of that set:
+//
+//   - POST /sites/{site_id}/gateways/{gateway_id}/token creates a token
+//     for a Gateway that has none. Every Gateway this SDK creates goes
+//     through Provision, which already mints one, so calling it would
+//     always fail with 409 Conflict - the API allows only one active
+//     token per Gateway and directs callers to rotate instead. The
+//     endpoint is only useful for a Gateway created elsewhere, such as
+//     in the admin portal.
+//   - POST /sites/{site_id}/gateway_tokens creates a multi-owner token
+//     shared by all of a Site's Gateways. The API marks it deprecated in
+//     favour of the per-Gateway endpoint above.
+//
+// The DELETE counterparts under /sites/{site_id}/gateway_tokens are
+// absent for the same reason: a token this SDK can create belongs to a
+// Gateway, and deleting that Gateway revokes it. The one case this
+// leaves uncovered is a Gateway stranded past a rotation grace period
+// (see [Gateway.RotationPending]), which is recovered by deleting and
+// re-provisioning the Gateway rather than by deleting its token.
+//
+// If you need to adopt Gateways created outside this SDK, the token
+// endpoints above are the gap to fill - adding them is additive, and
+// [IsConflict] is already here for the 409 the first one returns.
 type GatewaysService struct {
 	client *Client
 	siteID string
 }
 
-func (s *GatewaysService) basePath() string {
-	return "sites/" + s.siteID + "/gateways"
+func (s *GatewaysService) basePath(segments ...string) string {
+	return buildPath(append([]string{"sites", s.siteID, "gateways"}, segments...)...)
 }
 
 // Get fetches a single Gateway by ID.
 func (s *GatewaysService) Get(ctx context.Context, id string) (*Gateway, error) {
+	if err := checkID("site ID", s.siteID); err != nil {
+		return nil, err
+	}
+	if err := checkID("Gateway ID", id); err != nil {
+		return nil, err
+	}
 	var gateway Gateway
-	if err := s.client.do(ctx, "GET", s.basePath()+"/"+id, nil, nil, &gateway); err != nil {
+	if err := s.client.do(ctx, "GET", s.basePath(id), nil, nil, &gateway); err != nil {
 		return nil, err
 	}
 	return &gateway, nil
@@ -118,6 +156,9 @@ type GatewayListOptions struct {
 // List returns a page of the Site's Gateways. Pass nil for opts to use
 // the API's default page size and no filters.
 func (s *GatewaysService) List(ctx context.Context, opts *GatewayListOptions) (*Page[Gateway], error) {
+	if err := checkID("site ID", s.siteID); err != nil {
+		return nil, err
+	}
 	if opts == nil {
 		opts = &GatewayListOptions{}
 	}
@@ -132,6 +173,9 @@ func (s *GatewaysService) List(ctx context.Context, opts *GatewayListOptions) (*
 // Provision creates a new Gateway and mints its single-owner token in
 // one call. The returned Token is shown once - store it securely.
 func (s *GatewaysService) Provision(ctx context.Context, req *ProvisionGatewayRequest) (*ProvisionedGateway, error) {
+	if err := checkID("site ID", s.siteID); err != nil {
+		return nil, err
+	}
 	body, err := wrapBody("gateway", req)
 	if err != nil {
 		return nil, err
@@ -145,12 +189,18 @@ func (s *GatewaysService) Provision(ctx context.Context, req *ProvisionGatewayRe
 
 // Update renames a Gateway.
 func (s *GatewaysService) Update(ctx context.Context, id string, req *UpdateGatewayRequest) (*Gateway, error) {
+	if err := checkID("site ID", s.siteID); err != nil {
+		return nil, err
+	}
+	if err := checkID("Gateway ID", id); err != nil {
+		return nil, err
+	}
 	body, err := wrapBody("gateway", req)
 	if err != nil {
 		return nil, err
 	}
 	var gateway Gateway
-	if err := s.client.do(ctx, "PUT", s.basePath()+"/"+id, nil, body, &gateway); err != nil {
+	if err := s.client.do(ctx, "PATCH", s.basePath(id), nil, body, &gateway); err != nil {
 		return nil, err
 	}
 	return &gateway, nil
@@ -177,14 +227,28 @@ func (s *GatewaysService) Update(ctx context.Context, id string, req *UpdateGate
 // replaces only that pending token; the in-use one keeps its original
 // deadline.
 func (s *GatewaysService) RotateToken(ctx context.Context, id string) (*RotatedGatewayToken, error) {
+	if err := checkID("site ID", s.siteID); err != nil {
+		return nil, err
+	}
+	if err := checkID("Gateway ID", id); err != nil {
+		return nil, err
+	}
 	var rotated RotatedGatewayToken
-	if err := s.client.do(ctx, "POST", s.basePath()+"/"+id+"/token/rotate", nil, nil, &rotated); err != nil {
+	if err := s.client.do(ctx, "POST", s.basePath(id, "token", "rotate"), nil, nil, &rotated); err != nil {
 		return nil, err
 	}
 	return &rotated, nil
 }
 
-// Delete deletes a Gateway, revoking its token.
+// Delete deletes a Gateway, revoking its token. This is the only way
+// this SDK revokes a token: see the [GatewaysService] doc comment for
+// why the API's standalone token-deletion endpoints are not wrapped.
 func (s *GatewaysService) Delete(ctx context.Context, id string) error {
-	return s.client.do(ctx, "DELETE", s.basePath()+"/"+id, nil, nil, nil)
+	if err := checkID("site ID", s.siteID); err != nil {
+		return err
+	}
+	if err := checkID("Gateway ID", id); err != nil {
+		return err
+	}
+	return s.client.do(ctx, "DELETE", s.basePath(id), nil, nil, nil)
 }

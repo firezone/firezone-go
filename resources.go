@@ -80,14 +80,28 @@ type CreateResourceRequest struct {
 
 // UpdateResourceRequest is the request body for [ResourcesService.Update].
 // All fields are optional; omitted fields keep their current value.
+//
+// The nullable fields are typed [Null] so they can be cleared as well as
+// set - see that type for the three states. Filters is a pointer to a
+// slice for the same reason: a nil pointer leaves the Resource's filters
+// alone, while a pointer to an empty slice removes all of them.
 type UpdateResourceRequest struct {
-	Name               string       `json:"name,omitempty"`
-	Type               ResourceType `json:"type,omitempty"`
-	Address            string       `json:"address,omitempty"`
-	AddressDescription string       `json:"address_description,omitempty"`
-	IPStack            IPStack      `json:"ip_stack,omitempty"`
-	SiteID             string       `json:"site_id,omitempty"`
-	Filters            []Filter     `json:"filters,omitempty"`
+	Name    string        `json:"name,omitempty"`
+	Type    ResourceType  `json:"type,omitempty"`
+	Address *Null[string] `json:"address,omitempty"`
+	// AddressDescription is free-form text describing the address.
+	// Clear[string]() removes it. Set("") removes it too - the API
+	// replaces an empty string with the field's default rather than
+	// storing it - but Clear states the intent.
+	AddressDescription *Null[string]  `json:"address_description,omitempty"`
+	IPStack            *Null[IPStack] `json:"ip_stack,omitempty"`
+	// SiteID moves the Resource to another Site. Clearing it detaches
+	// the Resource from its Site, which the API only permits for device
+	// pool Resources.
+	SiteID *Null[string] `json:"site_id,omitempty"`
+	// Filters replaces the Resource's filters wholesale. nil leaves them
+	// unchanged; a pointer to an empty slice removes all of them.
+	Filters *[]Filter `json:"filters,omitempty"`
 }
 
 // ResourcesService manages Resources, and, nested under them, static
@@ -106,8 +120,11 @@ func (s *ResourcesService) PoolMembers(resourceID string) *PoolMembersService {
 
 // Get fetches a single Resource by ID.
 func (s *ResourcesService) Get(ctx context.Context, id string) (*Resource, error) {
+	if err := checkID("Resource ID", id); err != nil {
+		return nil, err
+	}
 	var resource Resource
-	if err := s.client.do(ctx, "GET", "resources/"+id, nil, nil, &resource); err != nil {
+	if err := s.client.do(ctx, "GET", buildPath("resources", id), nil, nil, &resource); err != nil {
 		return nil, err
 	}
 	return &resource, nil
@@ -169,12 +186,15 @@ func (s *ResourcesService) Create(ctx context.Context, req *CreateResourceReques
 // pool's own type is not a change and is accepted, so a caller that
 // echoes the whole Resource back on update still works.
 func (s *ResourcesService) Update(ctx context.Context, id string, req *UpdateResourceRequest) (*Resource, error) {
+	if err := checkID("Resource ID", id); err != nil {
+		return nil, err
+	}
 	body, err := wrapBody("resource", req)
 	if err != nil {
 		return nil, err
 	}
 	var resource Resource
-	if err := s.client.do(ctx, "PUT", "resources/"+id, nil, body, &resource); err != nil {
+	if err := s.client.do(ctx, "PATCH", buildPath("resources", id), nil, body, &resource); err != nil {
 		return nil, err
 	}
 	return &resource, nil
@@ -182,5 +202,8 @@ func (s *ResourcesService) Update(ctx context.Context, id string, req *UpdateRes
 
 // Delete deletes a Resource.
 func (s *ResourcesService) Delete(ctx context.Context, id string) error {
-	return s.client.do(ctx, "DELETE", "resources/"+id, nil, nil, nil)
+	if err := checkID("Resource ID", id); err != nil {
+		return err
+	}
+	return s.client.do(ctx, "DELETE", buildPath("resources", id), nil, nil, nil)
 }

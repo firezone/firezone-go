@@ -63,6 +63,39 @@ func TestResourcesService_Create(t *testing.T) {
 	})
 }
 
+func TestResourcesService_Update(t *testing.T) {
+	var gotMethod, gotPath string
+	var gotBody map[string]any
+	client := testutil.NewClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		decodeJSONBody(t, r, &gotBody)
+		testutil.JSONResponse(http.StatusOK, map[string]any{
+			"data": map[string]any{"id": "res-1", "name": "renamed", "type": "cidr"},
+		})(w, r)
+	}))
+
+	resource, err := client.Resources.Update(context.Background(), "res-1",
+		&firezone.UpdateResourceRequest{Name: "renamed"})
+	if err != nil {
+		t.Fatalf("Update returned error: %v", err)
+	}
+	if gotMethod != http.MethodPatch || gotPath != "/resources/res-1" {
+		t.Errorf("request = %s %s, want PATCH /resources/res-1", gotMethod, gotPath)
+	}
+	// A rename must not carry any other key: an update is a merge, and a
+	// stray zero value would overwrite a field the caller never named.
+	reqResource, ok := gotBody["resource"].(map[string]any)
+	if !ok {
+		t.Fatalf("body[\"resource\"] = %v, want an object", gotBody["resource"])
+	}
+	if len(reqResource) != 1 || reqResource["name"] != "renamed" {
+		t.Errorf("body resource = %v, want only name=renamed", reqResource)
+	}
+	if resource.Name != "renamed" {
+		t.Errorf("resource.Name = %q, want renamed", resource.Name)
+	}
+}
+
 func TestResourcesService_Delete(t *testing.T) {
 	client := testutil.NewClient(t, testutil.JSONResponse(http.StatusOK, map[string]any{
 		"data": map[string]any{"id": "res-1", "name": "postgres-prod"},
