@@ -63,3 +63,14 @@ func (n *Null[T]) UnmarshalJSON(data []byte) error {
 	n.Valid = true
 	return nil
 }
+
+// Null's JSON methods split their receivers deliberately: MarshalJSON
+// takes a value so a Null works whether it is addressable or not, while
+// UnmarshalJSON needs a pointer to assign through. These assertions pin
+// that choice down at build time - changing either receiver would stop
+// encoding/json finding the method, and it would silently fall back to
+// encoding the struct's fields rather than failing to compile.
+var (
+	_ json.Marshaler   = Null[string]{}
+	_ json.Unmarshaler = (*Null[string])(nil)
+)

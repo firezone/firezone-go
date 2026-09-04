@@ -87,6 +87,8 @@ type Client struct {
 	httpClient *http.Client
 	userAgent  string
 
+	requestTimeout time.Duration
+
 	retryEnabled bool
 	maxRetries   int
 	retryMaxWait time.Duration
@@ -127,13 +129,29 @@ type Client struct {
 }
 
 // Option configures a [Client].
-type Option func(*Client)
+//
+// An Option returns an error rather than silently accepting bad input,
+// so a misconfiguration is reported by [NewClient] at construction
+// instead of surfacing later as a failed - or worse, a silently
+// skipped - request. [NewClient] applies options in order and stops at
+// the first error.
+type Option func(*Client) error
 
-// WithHTTPClient sets the underlying *http.Client used for requests.
-// The default is http.DefaultClient. Passing nil is an error, reported
-// by [NewClient] rather than deferred to the first request.
+// WithHTTPClient sets the underlying *http.Client used for requests,
+// replacing the default described in [NewClient].
+//
+// Supplying a client is how a caller sets its own timeout, transport,
+// or proxy configuration. Passing nil is an error: it would otherwise
+// panic with a nil dereference on the first request, pointing at the
+// request rather than at the option that caused it.
 func WithHTTPClient(hc *http.Client) Option {
-	return func(c *Client) { c.httpClient = hc }
+	return func(c *Client) error {
+		if hc == nil {
+			return errors.New("firezone: WithHTTPClient was given a nil *http.Client")
+		}
+		c.httpClient = hc
+		return nil
+	}
 }
 
 // WithUserAgent replaces the User-Agent header sent with every request.
@@ -142,7 +160,69 @@ func WithHTTPClient(hc *http.Client) Option {
 //
 //	firezone.WithUserAgent("terraform-provider-firezone/2.1.0 firezone-go-client/" + firezone.Version)
 func WithUserAgent(ua string) Option {
-	return func(c *Client) { c.userAgent = ua }
+	return func(c *Client) error {
+		if ua == "" {
+			return errors.New("firezone: WithUserAgent was given an empty string; omit the option to keep the default")
+		}
+		c.userAgent = ua
+		return nil
+	}
+}
+
+// defaultRequestTimeout bounds a single HTTP attempt, from dialing to
+// reading the response body. Change it with [WithRequestTimeout].
+//
+// A default is needed because neither http.DefaultClient nor a bare
+// http.Client has a timeout: a caller who passes a context without a
+// deadline would otherwise wait forever on an unresponsive endpoint,
+// with the retry logic unable to help - nothing ever returns to be
+// retried.
+//
+// The value is generous for a control-plane API where every response is
+// a small JSON document.
+const defaultRequestTimeout = 30 * time.Second
+
+// newDefaultHTTPClient returns the *http.Client a [Client] uses unless
+// [WithHTTPClient] says otherwise.
+//
+// It deliberately does not return http.DefaultClient. That value is
+// process-global: a caller who wanted to adjust the SDK's transport
+// would be adjusting it for every other package in the binary too, and
+// any other package that mutates it would be adjusting the SDK's.
+//
+// It carries no Timeout of its own. The request timeout is applied to
+// the context instead - see [WithRequestTimeout] - so that it composes
+// with a caller-supplied client rather than being lost the moment one
+// is passed.
+func newDefaultHTTPClient() *http.Client {
+	return &http.Client{}
+}
+
+// WithRequestTimeout bounds a single HTTP attempt, from dialing to
+// reading the response body. The default is defaultRequestTimeout.
+//
+// This bounds one attempt, not a whole call: retry waits sit between
+// requests rather than inside one, so a rate-limited call can still
+// take longer overall, up to whatever budget [WithRetry] allows.
+//
+// It is applied to the request context rather than to the underlying
+// http.Client, so nothing here overrides anything else. A Timeout on a
+// client passed to [WithHTTPClient], a deadline already on the caller's
+// context, and this option all apply together, and whichever expires
+// first ends the attempt.
+//
+// Zero means the SDK imposes no timeout of its own, leaving the
+// deadline entirely to the caller's context and http.Client. A negative
+// duration is an error - context.WithTimeout would treat it as an
+// already-expired deadline, failing every request before it is sent.
+func WithRequestTimeout(d time.Duration) Option {
+	return func(c *Client) error {
+		if d < 0 {
+			return fmt.Errorf("firezone: WithRequestTimeout was given a negative duration (%s)", d)
+		}
+		c.requestTimeout = d
+		return nil
+	}
 }
 
 // defaultMaxRetries is the retry budget a client gets unless
@@ -166,11 +246,18 @@ const defaultMaxRetries = 10
 // don't retry in lockstep.
 //
 // maxRetries is the number of retries after the first attempt, so zero
-// means "try once, do not retry". A negative budget is clamped to zero
+// means "try once, do not retry". A negative budget is rejected rather
+// than clamped: the retry loop runs maxRetries+1 times, so a negative
+// value would make it run zero times and return no response and no
+// error at all. Nothing a caller can mean by it is worth guessing at.
 func WithRetry(enabled bool, maxRetries int) Option {
-	return func(c *Client) {
+	return func(c *Client) error {
+		if maxRetries < 0 {
+			return fmt.Errorf("firezone: WithRetry was given a negative retry budget (%d)", maxRetries)
+		}
 		c.retryEnabled = enabled
-		c.maxRetries = max(maxRetries, 0)
+		c.maxRetries = maxRetries
+		return nil
 	}
 }
 
@@ -182,7 +269,10 @@ func WithRetry(enabled bool, maxRetries int) Option {
 // a higher cap buys more total patience per retry than more attempts
 // at a low cap does.
 func WithRetryMaxWait(d time.Duration) Option {
-	return func(c *Client) { c.retryMaxWait = d }
+	return func(c *Client) error {
+		c.retryMaxWait = d
+		return nil
+	}
 }
 
 // checkBaseURL rejects a base URL that url.Parse accepts but that can
@@ -213,6 +303,10 @@ func checkBaseURL(raw string, u *url.URL) error {
 // NewClient constructs a Firezone API client. baseURL is the bare API
 // host (e.g. "https://api.firezone.dev") - do not include a version
 // segment. token is the Bearer token for an api_client actor.
+//
+// Requests go through an *http.Client private to this SDK, and each
+// attempt is bounded by defaultRequestTimeout. Pass [WithHTTPClient] to
+// supply your own client and [WithRequestTimeout] to change the bound.
 func NewClient(baseURL, token string, opts ...Option) (*Client, error) {
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
@@ -223,25 +317,19 @@ func NewClient(baseURL, token string, opts ...Option) (*Client, error) {
 	}
 
 	c := &Client{
-		baseURL:      parsed,
-		token:        token,
-		httpClient:   http.DefaultClient,
-		userAgent:    defaultUserAgent,
-		retryEnabled: true,
-		maxRetries:   defaultMaxRetries,
+		baseURL:        parsed,
+		token:          token,
+		httpClient:     newDefaultHTTPClient(),
+		requestTimeout: defaultRequestTimeout,
+		userAgent:      defaultUserAgent,
+		retryEnabled:   true,
+		maxRetries:     defaultMaxRetries,
 	}
 
 	for _, opt := range opts {
-		opt(c)
-	}
-
-	// Options are applied before this check, not after, so it sees what
-	// the caller actually ended up with. An Option cannot report an
-	// error itself - it is a func(*Client) - so the only place a bad
-	// one can surface is here, which is still far better than the first
-	// request panicking on a nil *http.Client.
-	if c.httpClient == nil {
-		return nil, errors.New("firezone: WithHTTPClient was given a nil *http.Client")
+		if err := opt(c); err != nil {
+			return nil, err
+		}
 	}
 
 	c.Sites = &SitesService{client: c}
@@ -323,6 +411,17 @@ type listEnvelope[T any] struct {
 // Every call site builds its path that way, so a caller-supplied ID can
 // never introduce a path separator.
 func (c *Client) rawRequest(ctx context.Context, method, requestPath string, query url.Values, body requestBody) ([]byte, error) {
+	// The timeout covers reading the response body as well as the round
+	// trip, which is why it is cancelled on the way out of this function
+	// rather than handed back to the caller: rawRequest reads the body
+	// to completion before returning, so nothing outstanding depends on
+	// the context afterwards.
+	if c.requestTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.requestTimeout)
+		defer cancel()
+	}
+
 	u, err := resolvePath(c.baseURL, requestPath)
 	if err != nil {
 		return nil, err

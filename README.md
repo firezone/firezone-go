@@ -188,6 +188,33 @@ Disable or tune this via `firezone.WithRetry`:
 client, _ := firezone.NewClient(endpoint, token, firezone.WithRetry(false, 0))
 ```
 
+## Timeouts
+
+Each attempt is bounded by a 30 second timeout. That bounds one attempt,
+not a whole retried call — retry waits sit between requests rather than
+inside one — so a rate-limited call can still take longer overall, up to
+whatever budget `WithRetry` allows.
+
+```go
+client, _ := firezone.NewClient(endpoint, token,
+    firezone.WithRequestTimeout(10 * time.Second))
+```
+
+Pass `0` to impose no timeout of its own, leaving the deadline entirely
+to the caller.
+
+The timeout is applied to the request context, not to the underlying
+`http.Client`, so it composes rather than competes. A `Timeout` on a
+client passed to `WithHTTPClient`, a deadline already on the context you
+pass in, and `WithRequestTimeout` all apply together — whichever expires
+first ends the attempt:
+
+```go
+ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+defer cancel()
+site, err := client.Sites.Get(ctx, siteID)
+```
+
 ## Testing
 
 ```bash

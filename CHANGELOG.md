@@ -32,33 +32,17 @@ versioning note above for what that means for compatibility.
 - Cursor pagination on every list method (`ListOptions` → `Page[T]`).
 - Typed errors: `APIError` carrying RFC 9457 problem details, with
   `IsNotFound`, `IsValidation`, `IsRateLimited`, `IsForbidden`,
-  `IsUnauthorized` and `IsConflict` predicates.
+  `IsUnauthorized` and `IsConflict` predicates. `ErrMissingID` and
+  `ErrNilRequest` cover the two ways a call can be malformed before it
+  is sent.
 - Automatic retry with exponential backoff and jitter on HTTP 429,
   honouring `Retry-After`. Configurable via `WithRetry` and
   `WithRetryMaxWait`.
+- A 30 second bound on each HTTP attempt, configurable via
+  `WithRequestTimeout` and disabled by passing `0`.
 - `Null[T]` with `Set` and `Clear`, so nullable fields on merge-patch
   update requests can be cleared as well as set.
 - `Version`, sent as part of the default `User-Agent`.
-- `ErrNilRequest`, returned by every `Create` and `Update` method when
-  handed a nil request struct. Matched with `errors.Is`, alongside the
-  existing `ErrMissingID`.
-
-### Validation
-
-Three ways a misconfigured client could fail quietly, all caught before
-a request is made:
-
-- A negative `WithRetry` budget made the retry loop run zero times,
-  returning no response and no error. The caller saw a zero-valued
-  result and a nil error, with no request having left the process.
-  Negative budgets are now clamped to zero.
-- A nil request struct encoded as `{"site": null}` rather than being
-  rejected: it reaches the body encoder as an `any` holding a typed nil
-  pointer, so a plain `v == nil` check reads false. It now returns
-  `ErrNilRequest`.
-- `WithHTTPClient(nil)` panicked with a nil dereference on the first
-  request. `NewClient` now rejects it and says which option was at
-  fault.
 
 ### Notes
 
@@ -71,6 +55,18 @@ a request is made:
 - Some endpoints are deliberately not wrapped; the README lists which,
   and the `GatewaysService` doc comment explains the Gateway token ones
   in particular.
+- `Option` is `func(*Client) error`, so an option validates its own
+  input and `NewClient` reports the failure at construction, stopping at
+  the first error.
+- The request timeout is applied to the request context rather than to
+  the `http.Client`, so it composes with a client passed to
+  `WithHTTPClient` and with a deadline already on the caller's context
+  instead of overriding either. Whichever expires first ends the
+  attempt, and the bound covers one attempt rather than a whole retried
+  call.
+- The SDK does not use `http.DefaultClient`. That value is
+  process-global, so sharing it would mean SDK transport changes leaking
+  into the rest of the binary and vice versa.
 
 [Unreleased]: https://github.com/firezone/firezone-go/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/firezone/firezone-go/releases/tag/v0.1.0
