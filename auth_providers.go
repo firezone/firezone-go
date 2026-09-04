@@ -22,8 +22,19 @@ type AuthProvider struct {
 	// ClientSessionLifetimeSecs and PortalSessionLifetimeSecs are how
 	// long a sign-in through this provider stays valid on a Client
 	// device and in the admin portal respectively.
-	ClientSessionLifetimeSecs int `json:"client_session_lifetime_secs"`
-	PortalSessionLifetimeSecs int `json:"portal_session_lifetime_secs"`
+	//
+	// Both are nil when the provider sets no override and Firezone's own
+	// defaults apply, which is the usual case - the columns have no
+	// database default, so a provider that has never had them configured
+	// stores null. They are pointers for that reason: a plain int would
+	// decode null to 0, which reads as "sessions expire immediately"
+	// rather than "not configured".
+	//
+	// The spec marks these nullable only on the Entra provider, but the
+	// underlying schema is identical for all five, so treat every one of
+	// them as nullable.
+	ClientSessionLifetimeSecs *int `json:"client_session_lifetime_secs,omitempty"`
+	PortalSessionLifetimeSecs *int `json:"portal_session_lifetime_secs,omitempty"`
 
 	IsDisabled bool `json:"is_disabled"`
 
@@ -86,8 +97,11 @@ type EmailOTPAuthProvidersService struct {
 
 // Get fetches a single Email OTP auth provider by ID.
 func (s *EmailOTPAuthProvidersService) Get(ctx context.Context, id string) (*EmailOTPAuthProvider, error) {
+	if err := checkID("auth provider ID", id); err != nil {
+		return nil, err
+	}
 	var p EmailOTPAuthProvider
-	if err := s.client.do(ctx, "GET", "email_otp_auth_providers/"+id, nil, nil, &p); err != nil {
+	if err := s.client.do(ctx, "GET", buildPath("email_otp_auth_providers", id), nil, nil, &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -107,8 +121,11 @@ type OIDCAuthProvidersService struct {
 
 // Get fetches a single OIDC auth provider by ID.
 func (s *OIDCAuthProvidersService) Get(ctx context.Context, id string) (*OIDCAuthProvider, error) {
+	if err := checkID("auth provider ID", id); err != nil {
+		return nil, err
+	}
 	var p OIDCAuthProvider
-	if err := s.client.do(ctx, "GET", "oidc_auth_providers/"+id, nil, nil, &p); err != nil {
+	if err := s.client.do(ctx, "GET", buildPath("oidc_auth_providers", id), nil, nil, &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -128,8 +145,11 @@ type GoogleAuthProvidersService struct {
 
 // Get fetches a single Google auth provider by ID.
 func (s *GoogleAuthProvidersService) Get(ctx context.Context, id string) (*GoogleAuthProvider, error) {
+	if err := checkID("auth provider ID", id); err != nil {
+		return nil, err
+	}
 	var p GoogleAuthProvider
-	if err := s.client.do(ctx, "GET", "google_auth_providers/"+id, nil, nil, &p); err != nil {
+	if err := s.client.do(ctx, "GET", buildPath("google_auth_providers", id), nil, nil, &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -149,8 +169,11 @@ type EntraAuthProvidersService struct {
 
 // Get fetches a single Entra auth provider by ID.
 func (s *EntraAuthProvidersService) Get(ctx context.Context, id string) (*EntraAuthProvider, error) {
+	if err := checkID("auth provider ID", id); err != nil {
+		return nil, err
+	}
 	var p EntraAuthProvider
-	if err := s.client.do(ctx, "GET", "entra_auth_providers/"+id, nil, nil, &p); err != nil {
+	if err := s.client.do(ctx, "GET", buildPath("entra_auth_providers", id), nil, nil, &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -170,8 +193,11 @@ type OktaAuthProvidersService struct {
 
 // Get fetches a single Okta auth provider by ID.
 func (s *OktaAuthProvidersService) Get(ctx context.Context, id string) (*OktaAuthProvider, error) {
+	if err := checkID("auth provider ID", id); err != nil {
+		return nil, err
+	}
 	var p OktaAuthProvider
-	if err := s.client.do(ctx, "GET", "okta_auth_providers/"+id, nil, nil, &p); err != nil {
+	if err := s.client.do(ctx, "GET", buildPath("okta_auth_providers", id), nil, nil, &p); err != nil {
 		return nil, err
 	}
 	return &p, nil

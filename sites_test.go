@@ -220,8 +220,8 @@ func TestSitesService_Update(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Update returned error: %v", err)
 	}
-	if gotMethod != http.MethodPut || gotPath != "/sites/site-1" {
-		t.Errorf("request = %s %s, want PUT /sites/site-1", gotMethod, gotPath)
+	if gotMethod != http.MethodPatch || gotPath != "/sites/site-1" {
+		t.Errorf("request = %s %s, want PATCH /sites/site-1", gotMethod, gotPath)
 	}
 	if site.Name != "renamed" {
 		t.Errorf("site.Name = %q, want renamed", site.Name)

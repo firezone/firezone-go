@@ -124,8 +124,8 @@ func TestClientsService_Update(t *testing.T) {
 		t.Fatalf("Update returned error: %v", err)
 	}
 
-	if gotMethod != http.MethodPut || gotPath != "/clients/client-1" {
-		t.Errorf("request = %s %s, want PUT /clients/client-1", gotMethod, gotPath)
+	if gotMethod != http.MethodPatch || gotPath != "/clients/client-1" {
+		t.Errorf("request = %s %s, want PATCH /clients/client-1", gotMethod, gotPath)
 	}
 	reqClient, ok := gotBody["client"].(map[string]any)
 	if !ok || reqClient["name"] != "renamed" {

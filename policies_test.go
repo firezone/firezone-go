@@ -132,8 +132,8 @@ func TestPoliciesService_DisableEnable(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Disable returned error: %v", err)
 		}
-		if gotMethod != http.MethodPut || gotPath != "/policies/pol-1" {
-			t.Errorf("request = %s %s, want PUT /policies/pol-1", gotMethod, gotPath)
+		if gotMethod != http.MethodPatch || gotPath != "/policies/pol-1" {
+			t.Errorf("request = %s %s, want PATCH /policies/pol-1", gotMethod, gotPath)
 		}
 
 		reqPolicy, ok := gotBody["policy"].(map[string]any)
@@ -168,8 +168,8 @@ func TestPoliciesService_DisableEnable(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Enable returned error: %v", err)
 		}
-		if gotMethod != http.MethodPut || gotPath != "/policies/pol-1" {
-			t.Errorf("request = %s %s, want PUT /policies/pol-1", gotMethod, gotPath)
+		if gotMethod != http.MethodPatch || gotPath != "/policies/pol-1" {
+			t.Errorf("request = %s %s, want PATCH /policies/pol-1", gotMethod, gotPath)
 		}
 
 		reqPolicy, ok := gotBody["policy"].(map[string]any)

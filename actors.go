@@ -65,11 +65,13 @@ type CreateActorRequest struct {
 // it names the Actor behind the calling token - an Actor cannot
 // disable itself.
 type UpdateActorRequest struct {
-	Name                string    `json:"name,omitempty"`
-	Type                ActorType `json:"type,omitempty"`
-	Email               string    `json:"email,omitempty"`
-	AllowEmailOTPSignIn *bool     `json:"allow_email_otp_sign_in,omitempty"`
-	IsDisabled          *bool     `json:"is_disabled,omitempty"`
+	Name string    `json:"name,omitempty"`
+	Type ActorType `json:"type,omitempty"`
+	// Email is nullable, so it is typed [Null] - Clear[string]() removes
+	// the Actor's email, and a nil pointer leaves it alone.
+	Email               *Null[string] `json:"email,omitempty"`
+	AllowEmailOTPSignIn *bool         `json:"allow_email_otp_sign_in,omitempty"`
+	IsDisabled          *bool         `json:"is_disabled,omitempty"`
 }
 
 // ActorsService manages Actors.
@@ -79,8 +81,11 @@ type ActorsService struct {
 
 // Get fetches a single Actor by ID.
 func (s *ActorsService) Get(ctx context.Context, id string) (*Actor, error) {
+	if err := checkID("Actor ID", id); err != nil {
+		return nil, err
+	}
 	var actor Actor
-	if err := s.client.do(ctx, "GET", "actors/"+id, nil, nil, &actor); err != nil {
+	if err := s.client.do(ctx, "GET", buildPath("actors", id), nil, nil, &actor); err != nil {
 		return nil, err
 	}
 	return &actor, nil
@@ -128,12 +133,15 @@ func (s *ActorsService) Create(ctx context.Context, req *CreateActorRequest) (*A
 
 // Update updates an Actor.
 func (s *ActorsService) Update(ctx context.Context, id string, req *UpdateActorRequest) (*Actor, error) {
+	if err := checkID("Actor ID", id); err != nil {
+		return nil, err
+	}
 	body, err := wrapBody("actor", req)
 	if err != nil {
 		return nil, err
 	}
 	var actor Actor
-	if err := s.client.do(ctx, "PUT", "actors/"+id, nil, body, &actor); err != nil {
+	if err := s.client.do(ctx, "PATCH", buildPath("actors", id), nil, body, &actor); err != nil {
 		return nil, err
 	}
 	return &actor, nil
@@ -141,7 +149,10 @@ func (s *ActorsService) Update(ctx context.Context, id string, req *UpdateActorR
 
 // Delete deletes an Actor.
 func (s *ActorsService) Delete(ctx context.Context, id string) error {
-	return s.client.do(ctx, "DELETE", "actors/"+id, nil, nil, nil)
+	if err := checkID("Actor ID", id); err != nil {
+		return err
+	}
+	return s.client.do(ctx, "DELETE", buildPath("actors", id), nil, nil, nil)
 }
 
 // Disable disables an Actor, immediately revoking all of its active
@@ -151,6 +162,9 @@ func (s *ActorsService) Delete(ctx context.Context, id string) error {
 // This is a convenience wrapper over [ActorsService.Update]; the API
 // has no dedicated disable endpoint.
 func (s *ActorsService) Disable(ctx context.Context, id string) (*Actor, error) {
+	if err := checkID("Actor ID", id); err != nil {
+		return nil, err
+	}
 	disabled := true
 	return s.Update(ctx, id, &UpdateActorRequest{IsDisabled: &disabled})
 }
@@ -161,6 +175,9 @@ func (s *ActorsService) Disable(ctx context.Context, id string) (*Actor, error) 
 // This is a convenience wrapper over [ActorsService.Update]; the API
 // has no dedicated enable endpoint.
 func (s *ActorsService) Enable(ctx context.Context, id string) (*Actor, error) {
+	if err := checkID("Actor ID", id); err != nil {
+		return nil, err
+	}
 	disabled := false
 	return s.Update(ctx, id, &UpdateActorRequest{IsDisabled: &disabled})
 }

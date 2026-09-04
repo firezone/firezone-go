@@ -42,9 +42,11 @@ type ClientDevice struct {
 }
 
 // UpdateClientRequest is the request body for [ClientsService.Update].
-// Name is the only mutable field.
+// Name is the only mutable field, and the API requires it, so it is
+// always sent - omitting it on an empty value would produce a body the
+// API rejects for a reason that doesn't name the field.
 type UpdateClientRequest struct {
-	Name string `json:"name,omitempty"`
+	Name string `json:"name"`
 }
 
 // ClientsService manages Clients.
@@ -54,8 +56,11 @@ type ClientsService struct {
 
 // Get fetches a single Client by ID.
 func (s *ClientsService) Get(ctx context.Context, id string) (*ClientDevice, error) {
+	if err := checkID("Client ID", id); err != nil {
+		return nil, err
+	}
 	var c ClientDevice
-	if err := s.client.do(ctx, "GET", "clients/"+id, nil, nil, &c); err != nil {
+	if err := s.client.do(ctx, "GET", buildPath("clients", id), nil, nil, &c); err != nil {
 		return nil, err
 	}
 	return &c, nil
@@ -88,12 +93,15 @@ func (s *ClientsService) List(ctx context.Context, opts *ClientListOptions) (*Pa
 
 // Update renames a Client.
 func (s *ClientsService) Update(ctx context.Context, id string, req *UpdateClientRequest) (*ClientDevice, error) {
+	if err := checkID("Client ID", id); err != nil {
+		return nil, err
+	}
 	body, err := wrapBody("client", req)
 	if err != nil {
 		return nil, err
 	}
 	var c ClientDevice
-	if err := s.client.do(ctx, "PUT", "clients/"+id, nil, body, &c); err != nil {
+	if err := s.client.do(ctx, "PATCH", buildPath("clients", id), nil, body, &c); err != nil {
 		return nil, err
 	}
 	return &c, nil
@@ -101,14 +109,20 @@ func (s *ClientsService) Update(ctx context.Context, id string, req *UpdateClien
 
 // Delete deletes a Client, unenrolling the device.
 func (s *ClientsService) Delete(ctx context.Context, id string) error {
-	return s.client.do(ctx, "DELETE", "clients/"+id, nil, nil, nil)
+	if err := checkID("Client ID", id); err != nil {
+		return err
+	}
+	return s.client.do(ctx, "DELETE", buildPath("clients", id), nil, nil, nil)
 }
 
 // Verify marks a Client as admin-verified, satisfying the
 // client_verified Policy condition.
 func (s *ClientsService) Verify(ctx context.Context, id string) (*ClientDevice, error) {
+	if err := checkID("Client ID", id); err != nil {
+		return nil, err
+	}
 	var c ClientDevice
-	if err := s.client.do(ctx, "PUT", "clients/"+id+"/verify", nil, nil, &c); err != nil {
+	if err := s.client.do(ctx, "PUT", buildPath("clients", id, "verify"), nil, nil, &c); err != nil {
 		return nil, err
 	}
 	return &c, nil
@@ -116,8 +130,11 @@ func (s *ClientsService) Verify(ctx context.Context, id string) (*ClientDevice, 
 
 // Unverify clears a Client's verification.
 func (s *ClientsService) Unverify(ctx context.Context, id string) (*ClientDevice, error) {
+	if err := checkID("Client ID", id); err != nil {
+		return nil, err
+	}
 	var c ClientDevice
-	if err := s.client.do(ctx, "PUT", "clients/"+id+"/unverify", nil, nil, &c); err != nil {
+	if err := s.client.do(ctx, "PUT", buildPath("clients", id, "unverify"), nil, nil, &c); err != nil {
 		return nil, err
 	}
 	return &c, nil

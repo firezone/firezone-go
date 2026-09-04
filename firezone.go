@@ -12,6 +12,13 @@
 // no path prefix of any kind. (URL path versioning was tried and rolled
 // back before shipping; if it returns, it'll live in exactly one place
 // here rather than every call site.)
+//
+// A [Client] is safe for concurrent use by multiple goroutines.
+//
+// Update requests are merge-patch: a field left at its zero value is
+// omitted and keeps its current value on the server. Fields the API
+// allows to be null are typed [Null] so they can be cleared as well as
+// set - see [Clear] and [Set].
 package firezone
 
 import (
@@ -22,7 +29,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -40,7 +47,25 @@ func (b requestBody) reader() io.Reader {
 	return bytes.NewReader(b)
 }
 
-const defaultUserAgent = "firezone-go-client"
+// Version is this SDK's released version, following semantic
+// versioning. It is sent as part of the default User-Agent, so a
+// Firezone operator can tell which client version a request came from.
+//
+// It is a constant rather than something read from build info, because
+// build info reports "(devel)" whenever the module is built rather than
+// consumed. Bump it as part of cutting a release - see CONTRIBUTING.md.
+const Version = "0.1.0"
+
+// defaultUserAgent identifies this SDK and its version, plus the Go
+// runtime it was built with - the latter is worth having when a
+// server-side problem turns out to be specific to one Go release's
+// TLS or HTTP behavior. It carries no OS or architecture, which would
+// narrow a request to a machine without helping diagnose anything.
+//
+// Override it wholesale with [WithUserAgent]; a caller that wants to
+// identify itself while keeping this information can build a string
+// from [Version].
+var defaultUserAgent = fmt.Sprintf("firezone-go-client/%s (%s)", Version, runtime.Version())
 
 // String returns a pointer to s. Useful for optional string fields
 // (e.g. [GroupListOptions.DirectoryID]) where a plain string's zero
@@ -50,6 +75,10 @@ func String(s string) *string {
 }
 
 // Client is a Firezone REST API client.
+//
+// A Client is safe for concurrent use by multiple goroutines: it holds
+// no mutable state once [NewClient] returns, and each request builds its
+// own URL and body.
 type Client struct {
 	baseURL    *url.URL
 	token      string
@@ -104,7 +133,11 @@ func WithHTTPClient(hc *http.Client) Option {
 	return func(c *Client) { c.httpClient = hc }
 }
 
-// WithUserAgent sets the User-Agent header sent with every request.
+// WithUserAgent replaces the User-Agent header sent with every request.
+// It replaces rather than extends the default, so a caller that wants to
+// keep the SDK's identity should include it:
+//
+//	firezone.WithUserAgent("terraform-provider-firezone/2.1.0 firezone-go-client/" + firezone.Version)
 func WithUserAgent(ua string) Option {
 	return func(c *Client) { c.userAgent = ua }
 }
@@ -146,13 +179,41 @@ func WithRetryMaxWait(d time.Duration) Option {
 	return func(c *Client) { c.retryMaxWait = d }
 }
 
+// checkBaseURL rejects a base URL that url.Parse accepts but that can
+// never produce a working request.
+//
+// url.Parse is permissive: it reads "api.firezone.dev" as a relative
+// path with no scheme and no host, and returns no error. Left alone,
+// that surfaces much later as "unsupported protocol scheme" from the
+// first API call, pointing at the request rather than at the typo in
+// the configuration that caused it.
+func checkBaseURL(raw string, u *url.URL) error {
+	switch {
+	case u.Scheme != "http" && u.Scheme != "https":
+		return fmt.Errorf("firezone: invalid base URL %q: scheme must be http or https, got %q", raw, u.Scheme)
+	case u.Host == "":
+		return fmt.Errorf("firezone: invalid base URL %q: missing host", raw)
+	// A query or fragment on the base URL is silently dropped on any
+	// request that sets its own query, so it would apply to some calls
+	// and not others. Reject it rather than half-honor it.
+	case u.RawQuery != "" || u.ForceQuery:
+		return fmt.Errorf("firezone: invalid base URL %q: must not include a query string", raw)
+	case u.Fragment != "":
+		return fmt.Errorf("firezone: invalid base URL %q: must not include a fragment", raw)
+	}
+	return nil
+}
+
 // NewClient constructs a Firezone API client. baseURL is the bare API
 // host (e.g. "https://api.firezone.dev") - do not include a version
 // segment. token is the Bearer token for an api_client actor.
 func NewClient(baseURL, token string, opts ...Option) (*Client, error) {
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
-		return nil, fmt.Errorf("firezone: invalid base URL: %w", err)
+		return nil, fmt.Errorf("firezone: invalid base URL %q: %w", baseURL, err)
+	}
+	if err := checkBaseURL(baseURL, parsed); err != nil {
+		return nil, err
 	}
 
 	c := &Client{
@@ -217,9 +278,15 @@ type listEnvelope[T any] struct {
 // retry logic - callers needing retry-on-429 behavior use requestWithRetry.
 // The returned body is the raw response bytes; a non-2xx status yields a
 // non-nil *APIError.
+//
+// requestPath must already be escaped, which is what [buildPath] returns.
+// Every call site builds its path that way, so a caller-supplied ID can
+// never introduce a path separator.
 func (c *Client) rawRequest(ctx context.Context, method, requestPath string, query url.Values, body requestBody) ([]byte, error) {
-	u := *c.baseURL
-	u.Path = path.Join(u.Path, requestPath)
+	u, err := resolvePath(c.baseURL, requestPath)
+	if err != nil {
+		return nil, err
+	}
 	if query != nil {
 		u.RawQuery = query.Encode()
 	}

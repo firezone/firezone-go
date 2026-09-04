@@ -29,11 +29,14 @@ type PoolMembersService struct {
 }
 
 func (s *PoolMembersService) basePath() string {
-	return "resources/" + s.resourceID + "/pool_members"
+	return buildPath("resources", s.resourceID, "pool_members")
 }
 
 // List returns a page of the pool's member Clients.
 func (s *PoolMembersService) List(ctx context.Context, opts *ListOptions) (*Page[PoolMember], error) {
+	if err := checkID("Resource ID", s.resourceID); err != nil {
+		return nil, err
+	}
 	return doList[PoolMember](ctx, s.client, "GET", s.basePath(), listOptionsToQuery(opts))
 }
 
@@ -65,6 +68,9 @@ type poolMemberDeviceIDs struct {
 // Client from another account, and a nonexistent ID all fail the same
 // way.
 func (s *PoolMembersService) ReplaceAll(ctx context.Context, deviceIDs []string) ([]string, error) {
+	if err := checkID("Resource ID", s.resourceID); err != nil {
+		return nil, err
+	}
 	entries := make([]poolMemberEntry, len(deviceIDs))
 	for i, id := range deviceIDs {
 		entries[i] = poolMemberEntry{DeviceID: id}
@@ -89,6 +95,9 @@ func (s *PoolMembersService) ReplaceAll(ctx context.Context, deviceIDs []string)
 // and removing one that isn't are both no-ops. remove is applied before
 // add, so an ID in both slices ends up in the pool.
 func (s *PoolMembersService) Patch(ctx context.Context, add, remove []string) ([]string, error) {
+	if err := checkID("Resource ID", s.resourceID); err != nil {
+		return nil, err
+	}
 	body, err := wrapBody("pool_members", poolMemberPatchBody{Add: add, Remove: remove})
 	if err != nil {
 		return nil, err

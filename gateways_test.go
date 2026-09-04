@@ -101,8 +101,8 @@ func TestGatewaysService_Update_Rename(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Update returned error: %v", err)
 	}
-	if gotMethod != http.MethodPut || gotPath != "/sites/site-1/gateways/gw-1" {
-		t.Errorf("request = %s %s, want PUT /sites/site-1/gateways/gw-1", gotMethod, gotPath)
+	if gotMethod != http.MethodPatch || gotPath != "/sites/site-1/gateways/gw-1" {
+		t.Errorf("request = %s %s, want PATCH /sites/site-1/gateways/gw-1", gotMethod, gotPath)
 	}
 	if gateway.Name != "renamed" {
 		t.Errorf("gateway.Name = %q, want renamed", gateway.Name)
