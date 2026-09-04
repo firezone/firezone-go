@@ -25,10 +25,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"runtime"
 	"strconv"
 	"time"
@@ -128,7 +130,8 @@ type Client struct {
 type Option func(*Client)
 
 // WithHTTPClient sets the underlying *http.Client used for requests.
-// The default is http.DefaultClient.
+// The default is http.DefaultClient. Passing nil is an error, reported
+// by [NewClient] rather than deferred to the first request.
 func WithHTTPClient(hc *http.Client) Option {
 	return func(c *Client) { c.httpClient = hc }
 }
@@ -161,10 +164,13 @@ const defaultMaxRetries = 10
 // Waits escalate exponentially, never drop below the response's
 // Retry-After header, and always carry jitter so concurrent callers
 // don't retry in lockstep.
+//
+// maxRetries is the number of retries after the first attempt, so zero
+// means "try once, do not retry". A negative budget is clamped to zero
 func WithRetry(enabled bool, maxRetries int) Option {
 	return func(c *Client) {
 		c.retryEnabled = enabled
-		c.maxRetries = maxRetries
+		c.maxRetries = max(maxRetries, 0)
 	}
 }
 
@@ -229,6 +235,15 @@ func NewClient(baseURL, token string, opts ...Option) (*Client, error) {
 		opt(c)
 	}
 
+	// Options are applied before this check, not after, so it sees what
+	// the caller actually ended up with. An Option cannot report an
+	// error itself - it is a func(*Client) - so the only place a bad
+	// one can surface is here, which is still far better than the first
+	// request panicking on a nil *http.Client.
+	if c.httpClient == nil {
+		return nil, errors.New("firezone: WithHTTPClient was given a nil *http.Client")
+	}
+
 	c.Sites = &SitesService{client: c}
 	c.Resources = &ResourcesService{client: c}
 	c.Policies = &PoliciesService{client: c}
@@ -247,18 +262,43 @@ func NewClient(baseURL, token string, opts ...Option) (*Client, error) {
 	return c, nil
 }
 
+// ErrNilRequest is returned when a Create or Update method is called
+// with a nil request body. Test for it with [errors.Is]:
+//
+//	if errors.Is(err, firezone.ErrNilRequest) { ... }
+//
+// It is returned before any request is made. Without it a nil request
+// encodes as {"site": null} rather than being caught: v is an any
+// holding a typed nil pointer, so a plain v == nil check is false and
+// json.Marshal happily writes the null.
+var ErrNilRequest = errors.New("request must not be nil")
+
 // wrapBody marshals v as JSON, nested under key, matching the API's
-// request body shape (e.g. {"site": {"name": "..."}}). A nil v produces
-// no body at all.
+// request body shape (e.g. {"site": {"name": "..."}}).
 func wrapBody(key string, v any) (requestBody, error) {
-	if v == nil {
-		return nil, nil
+	if isNilPointer(v) {
+		return nil, fmt.Errorf("firezone: %s %w", key, ErrNilRequest)
 	}
 	body, err := json.Marshal(map[string]any{key: v})
 	if err != nil {
 		return nil, fmt.Errorf("firezone: encoding request body: %w", err)
 	}
 	return requestBody(body), nil
+}
+
+// isNilPointer reports whether v is a nil pointer, including one boxed
+// in a non-nil any - the shape every Create and Update method produces
+// when handed a nil request struct.
+//
+// Only pointers are checked. The call sites that wrap a slice build it
+// with make, so it is never nil, and a nil slice would in any case mean
+// "no members", which is a request worth sending rather than an error.
+func isNilPointer(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	return rv.Kind() == reflect.Pointer && rv.IsNil()
 }
 
 // dataEnvelope mirrors the {"data": ...} shape every non-list API

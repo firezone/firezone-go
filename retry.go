@@ -3,6 +3,7 @@ package firezone
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"math/rand/v2"
 	"net/url"
@@ -54,6 +55,14 @@ func (c *Client) requestWithRetry(ctx context.Context, method, requestPath strin
 		}
 	}
 
+	// Unreachable: WithRetry clamps maxRetries to a non-negative value,
+	// so the loop above always runs at least once and always returns.
+	// Kept as a guard because the alternative failure mode is silent -
+	// a nil body with a nil error reads to the caller as a successful
+	// request that returned nothing.
+	if lastErr == nil {
+		return nil, fmt.Errorf("firezone: retry loop made no attempts with a budget of %d; this is a bug in the SDK", c.maxRetries)
+	}
 	return nil, lastErr
 }
 

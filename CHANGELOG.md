@@ -16,7 +16,7 @@ they will require a new major version.
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-09-02
+## [0.1.0] - 2026-09-04
 
 First public release. The API is complete and verified against a live
 Firezone portal, but ships as 0.x while it gets real use. See the
@@ -39,6 +39,26 @@ versioning note above for what that means for compatibility.
 - `Null[T]` with `Set` and `Clear`, so nullable fields on merge-patch
   update requests can be cleared as well as set.
 - `Version`, sent as part of the default `User-Agent`.
+- `ErrNilRequest`, returned by every `Create` and `Update` method when
+  handed a nil request struct. Matched with `errors.Is`, alongside the
+  existing `ErrMissingID`.
+
+### Validation
+
+Three ways a misconfigured client could fail quietly, all caught before
+a request is made:
+
+- A negative `WithRetry` budget made the retry loop run zero times,
+  returning no response and no error. The caller saw a zero-valued
+  result and a nil error, with no request having left the process.
+  Negative budgets are now clamped to zero.
+- A nil request struct encoded as `{"site": null}` rather than being
+  rejected: it reaches the body encoder as an `any` holding a typed nil
+  pointer, so a plain `v == nil` check reads false. It now returns
+  `ErrNilRequest`.
+- `WithHTTPClient(nil)` panicked with a nil dereference on the first
+  request. `NewClient` now rejects it and says which option was at
+  fault.
 
 ### Notes
 
