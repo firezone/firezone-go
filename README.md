@@ -1,5 +1,22 @@
 # Go Firezone
 
+> [!WARNING]
+> **This module has moved.** It was published to the module proxy under the
+> wrong name and all of its versions have been retracted. Development
+> continues at
+> [`firezone/firezone-sdk-go`](https://github.com/firezone/firezone-sdk-go).
+>
+> To migrate, change the import path - the package name stays `firezone`
+> and no other code changes are needed:
+>
+> ```bash
+> go get github.com/firezone/firezone-sdk-go
+> ```
+>
+> ```go
+> import firezone "github.com/firezone/firezone-sdk-go"
+> ```
+
 [![Go Reference](https://pkg.go.dev/badge/github.com/firezone/firezone-go.svg)](https://pkg.go.dev/github.com/firezone/firezone-go)
 [![Go Report Card](https://goreportcard.com/badge/github.com/firezone/firezone-go)](https://goreportcard.com/report/github.com/firezone/firezone-go)
 
